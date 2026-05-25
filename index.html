@@ -1924,14 +1924,16 @@ uc();
    캐리어 수만큼 화면을 세로 N분할, 각 칸에 해당 캐리어 전용 카메라.
    카메라: 캐빈쪽(중앙 X+0.9m)·높이 2.5m → 중앙 상단 로봇암(armRootY≈4.68m)을 마주봄.
    ══════════════════════════════════════════════════════ */
-// 측정값: J1(어깨) y4.68 → J3(팔꿈치) y3.2 → J6(손목) y2.79, 팔은 중앙에서 X+ 1.06 치우침.
-// 운전석=캐빈(X+ 바깥)에 앉아 눈앞 로봇팔 작업영역(y2.6~3.3)을 마주봄.
-const COCKPIT_EYE_Y = 2.3;          // 운전석 시점 높이 (m)
-const COCKPIT_EYE_DX = 2.1;         // 캐빈(X+ 바깥)에서 들여다봄 → 기둥에 안 막힘
-const COCKPIT_LOOK_DX = 0.4;        // 시선 타깃 X (로봇팔 본체 쪽)
-const COCKPIT_LOOK_Y = 2.85;        // 시선 타깃 높이 (팔꿈치~손목 작업영역 중심)
+// 운전석 1인칭(대표님 2026-05-25 확정): 캐리어는 통로(A1C/A2C)에 서서 Z축으로 주행.
+// 운전자는 주행방향(Z+ 통로 정면)을 봄 → 좌·우 양 사이드에 누리셀 랙이 늘어서고,
+// 포크가 좌/우 랙으로 뻗어 누리셀을 인입(픽업)하는 작업을 정확히 봄. 통로가 소실점까지 뻗음.
+const COCKPIT_EYE_Y   = 2.5;        // 눈높이 (m) — 차체 빔 아래
+const COCKPIT_EYE_DZ  = -1.8;       // 눈 Z 오프셋 (캐리어 중앙에서 약간 뒤 → 포크·전방 통로 함께 보임)
+const COCKPIT_LOOK_DZ = 9;          // 시선 타깃 Z (전방 통로 멀리 — 주행 정면)
+const COCKPIT_LOOK_Y  = 2.45;       // 시선 타깃 높이 (통로 바닥~랙 균형)
+const COCKPIT_FOV     = 72;         // 넓은 화각 → 좌우 양쪽 랙 포착
 const cockpitCams = carriers.map(()=>{
-  const c = new THREE.PerspectiveCamera(62, 1, .05, 200);
+  const c = new THREE.PerspectiveCamera(COCKPIT_FOV, 1, .05, 200);
   return c;
 });
 // 각 분할 칸의 HUD DOM 노드 캐시 { id, zone, stat, foot }
@@ -1966,9 +1968,9 @@ function syncCockpit(){
   carriers.forEach((c,i)=>{
     const cam = cockpitCams[i];
     cam.aspect = cellW / h; cam.updateProjectionMatrix();
-    // 캐리어 grp 위치(c.x, 0, c.z) 기준 운전석 시점
-    cam.position.set(c.x + COCKPIT_EYE_DX, COCKPIT_EYE_Y, c.z);
-    cam.lookAt(c.x + COCKPIT_LOOK_DX, COCKPIT_LOOK_Y, c.z);
+    // 통로 중앙(c.x, c.z)에서 약간 뒤 → Z+ 주행 정면을 봄. 좌우에 양쪽 랙.
+    cam.position.set(c.x, COCKPIT_EYE_Y, c.z + COCKPIT_EYE_DZ);
+    cam.lookAt(c.x, COCKPIT_LOOK_Y, c.z + COCKPIT_LOOK_DZ);
     // HUD
     const hud = cockpitHudCells[i]; if(!hud) return;
     const st = c.state|0;
