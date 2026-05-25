@@ -105,7 +105,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 <div id="top">
   <div id="logo">k1NuriFarm01 DT Monitering<small>SMART FARM DIGITAL TWIN · 5-SPAN · STRADDLE CARRIER FLEET</small></div>
   <div class="vd"></div>
-  <div class="kpi"><div class="kv">3,040</div><div class="kl">총 누리셀</div></div>
+  <div class="kpi"><div class="kv" id="kt-total">—</div><div class="kl">총 누리셀</div></div>
   <div class="kpi"><div class="kv r" id="kt-rdy">0</div><div class="kl">수확 임박</div></div>
   <div class="kpi"><div class="kv" id="kt-hv">109</div><div class="kl">오늘 수확</div></div>
   <div class="kpi"><div class="kv y" id="kt-cr">2/3</div><div class="kl">캐리어 운용</div></div>
@@ -238,7 +238,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 /* ═══ 레이아웃 상수 (9.6m 정합 확인)
    Wall(0.15) | R1(0.9) | A1(2.85) | R2(0.9) | R3(0.9) | A2(2.85) | R4(0.9) | Wall(0.15) = 9.6 ✓
    ═══ */
-const GW=9.6, GL=18, GH=6, DR=0.50, DW=0.9;
+const GW=9.6, GL=50, GH=6, DR=0.50, DW=0.9;
 const R1C=0.60,  A1C=2.475, R2C=4.35, R3C=5.25, A2C=7.125, R4C=9.00;
 const A1S=1.05,  A1E=3.90,  A1W=2.85;
 const A2S=5.70,  A2E=8.55,  A2W=2.85;
@@ -250,7 +250,9 @@ const TOTAL_W=GW*SPAN;   // 48m
 const HOUSE_X_MIN=0, HOUSE_X_MAX=TOTAL_W;
 
 const TY=[0.78,2.23,3.68,5.13];
-const DZ=[];for(let i=0;i<13;i++)DZ.push(0.63+i*1.26);
+// 누리셀 열: 50m 하우스 → 1열 38개 (간격 1.26m, 직경 1m + 0.26 여유)
+const DZ_N=38, DZ_GAP=1.26, DZ_0=0.63;
+const DZ=[];for(let i=0;i<DZ_N;i++)DZ.push(DZ_0+i*DZ_GAP);
 const NDRUM=SPAN*RACKXC.length*TY.length*DZ.length;
 
 /* Straddle Carrier 상수 (2×2×5 — 통로 폭 2.85m, 횡단 통로 2.2m에 들어가는 크기) */
@@ -275,8 +277,8 @@ const tempHist=spans.map(s=>Array.from({length:30},()=>s.temp+rng(-.8,.8)));
 const ctr=document.getElementById('ctr');
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x10202e);
-scene.fog=new THREE.FogExp2(0x10202e,.007);
-const cam=new THREE.PerspectiveCamera(40,ctr.clientWidth/ctr.clientHeight,.1,300);
+scene.fog=new THREE.FogExp2(0x10202e,.004);   // GL=50m 하우스 → 옅게(끝까지 보이게)
+const cam=new THREE.PerspectiveCamera(40,ctr.clientWidth/ctr.clientHeight,.1,500);
 const ren=new THREE.WebGLRenderer({antialias:true});
 ren.setPixelRatio(Math.min(devicePixelRatio,2));
 ren.setSize(ctr.clientWidth,ctr.clientHeight);
@@ -288,7 +290,8 @@ const sun=new THREE.DirectionalLight(0xfff0dd,1.05);
 sun.position.set(22,32,14);sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048);
 sun.shadow.camera.left=-70;sun.shadow.camera.right=70;
-sun.shadow.camera.top=32;sun.shadow.camera.bottom=-32;
+sun.shadow.camera.top=60;sun.shadow.camera.bottom=-60;
+sun.shadow.camera.far=200;
 scene.add(sun);
 const fill=new THREE.DirectionalLight(0x6ab0d0,.35);
 fill.position.set(-12,6,-10);scene.add(fill);
@@ -607,11 +610,16 @@ for(let si=0; si<SPAN; si++){
   const ox = si*GW;
   RACKXC.forEach((rc, ri)=>{
     const gx = ox + rc, gy = GH - .5, gz = GL*.5;
-    const body = new THREE.Mesh(rpiGeo, new THREE.MeshLambertMaterial({color:HW_COL.rpi}));
+    const body = new THREE.Mesh(rpiGeo, new THREE.MeshLambertMaterial({color:HW_COL.rpi, emissive:HW_COL.rpi, emissiveIntensity:.2}));
     body.position.set(gx, gy, gz); body.castShadow=true; hwLayer.add(body);
     // 방열판 (위)
     const heat = new THREE.Mesh(new THREE.BoxGeometry(.20,.06,.20), new THREE.MeshLambertMaterial({color:0x404850}));
     heat.position.set(gx, gy+.10, gz); hwLayer.add(heat);
+    // 데이터 기둥 (수신량 비례로 위로 솟는 빛 bar) — HW뷰 생동감 핵심
+    const pillarGeo = new THREE.CylinderGeometry(.05, .05, 1, 8);
+    const pillar = new THREE.Mesh(pillarGeo, new THREE.MeshBasicMaterial({color:0x5ee0e8, transparent:true, opacity:.55}));
+    pillar.position.set(gx, gy+.7, gz);   // 기둥 바닥이 게이트웨이 위
+    hwLayer.add(pillar);
     // LoRa 안테나 (아래로 — 노드 향함)
     const ant = new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.45,6), new THREE.MeshLambertMaterial({color:0x223040}));
     ant.position.set(gx+.18, gy-.22, gz); hwLayer.add(ant);
@@ -623,7 +631,7 @@ for(let si=0; si<SPAN; si++){
     bracket.position.set(gx, gy+.3, gz); hwLayer.add(bracket);
     const id = `RPi-${si+1}-${ri+1}`;
     rpiGateways.push({
-      body, led, ant, id,
+      body, led, ant, pillar, id,
       span: si, rack: ri,
       x: gx, y: gy, z: gz,
       k3s: 'Healthy',           // Healthy | NotReady
@@ -709,6 +717,28 @@ esp32Nodes.forEach(node=>{
   hwLayer.add(line);
   loraLinks.push({ line, node, gw });
 });
+
+/* ── LoRa 패킷 비행 풀 (HW뷰 생동감) ──
+   ESP32 노드 → 소속 RPi5로 빛 입자가 날아감. 풀 재사용 */
+const HWPKT_POOL = 60;
+const hwPackets = [];
+const hwPktGeo = new THREE.SphereGeometry(.06, 6, 5);
+for(let i=0;i<HWPKT_POOL;i++){
+  const m = new THREE.Mesh(hwPktGeo, new THREE.MeshBasicMaterial({color:0x7af0e0, transparent:true, opacity:0}));
+  m.visible = false;
+  hwLayer.add(m);
+  hwPackets.push({ mesh:m, from:null, to:null, t:0, active:false });
+}
+let hwPktIdx = 0;
+function flyLoraPacket(node, gw){
+  const p = hwPackets[hwPktIdx];
+  hwPktIdx = (hwPktIdx+1) % HWPKT_POOL;
+  p.from = { x:node.x+.08, y:node.y+.16, z:node.z };
+  p.to   = { x:gw.x+.18, y:gw.y-.22, z:gw.z };
+  p.t = 0; p.active = true;
+  p.mesh.visible = true;
+  p.mesh.material.opacity = .9;
+}
 
 // hwLayer 기본 숨김 (환경 뷰가 디폴트) — 토글로 켬
 hwLayer.visible = false;
@@ -926,6 +956,14 @@ for(let si=0; si<SPAN; si++){
   // 동별 라벨
   facLabel(`${si+1}동`, cx, GH+.3, GL+.6, '#5ee0e8', 1.4);
 
+  /* ── 하우스별 대형 온습도 패널 (동 중앙 상공, 갱신형) ── */
+  const thCv = document.createElement('canvas'); thCv.width=256; thCv.height=140;
+  const thTex = new THREE.CanvasTexture(thCv);
+  const thSpr = new THREE.Sprite(new THREE.SpriteMaterial({map:thTex, transparent:true, depthTest:false}));
+  thSpr.scale.set(4.2, 2.3, 1);
+  thSpr.position.set(cx, GH+2.4, GL*0.5);
+  facilityLayer.add(thSpr);
+
   // 관수 흐름 패킷 (드롭관 따라 흐름)
   const wpkt = new THREE.Mesh(new THREE.SphereGeometry(.06,8,6), new THREE.MeshBasicMaterial({color:0x7af0e0}));
   facilityLayer.add(wpkt);
@@ -934,6 +972,15 @@ for(let si=0; si<SPAN; si++){
   const apkt = new THREE.Mesh(new THREE.SphereGeometry(.07,8,6), new THREE.MeshBasicMaterial({color:0xffb070, transparent:true, opacity:.7}));
   facilityLayer.add(apkt);
   airFlowPkts.push({ pkt: apkt, cx, top: fcuY-.3, bot: 1.0, z: DUCT_Z, t: Math.random() });
+
+  /* ── 관수 점적 물방울 (드립 호스 → 작물로 떨어짐, 동당 몇 방울) ── */
+  const dripDrops = [];
+  for(let d=0; d<4; d++){
+    const drop = new THREE.Mesh(new THREE.SphereGeometry(.05,6,5), new THREE.MeshBasicMaterial({color:0x7af0e0, transparent:true, opacity:0}));
+    facilityLayer.add(drop);
+    const dripRx = ox + RACKXC[Math.floor(Math.random()*RACKXC.length)];
+    dripDrops.push({ mesh:drop, rx:dripRx, z: 2 + Math.random()*(GL-4), top: TY[3]+DR+.25, t: Math.random() });
+  }
 
   facUnits.push({
     span: si,
@@ -945,12 +992,61 @@ for(let si=0; si<SPAN; si++){
     supplyTemp: 18 + Math.random()*4,            // 공급 온도
     hvacLoad: 40 + Math.random()*40,             // 가동률 %
     mode: Math.random()<.5 ? '냉방' : '난방',
-    invHz: 45 + Math.random()*15                 // 인버터 출력 주파수 (Hz) → 팬 속도
+    invHz: 45 + Math.random()*15,                // 인버터 출력 주파수 (Hz) → 팬 속도
+    thCv, thTex, thSpr, dripDrops                // 대형 온습도 패널 + 점적 물방울
   });
 }
 
+/* 동별 온습도 패널 그리기 (tick에서 호출) */
+function drawThPanel(u){
+  const s = spans[u.span];
+  if(!s) return;
+  const c = u.thCv.getContext('2d');
+  c.clearRect(0,0,256,140);
+  // 배경
+  c.fillStyle='rgba(8,22,32,.92)'; c.fillRect(0,0,256,140);
+  const warm = s.temp > 26, cold = s.temp < 22;
+  c.strokeStyle = warm ? '#ff6160' : (cold ? '#3aa0e0' : '#2ec4b6'); c.lineWidth=3; c.strokeRect(2,2,252,136);
+  // 동 번호
+  c.fillStyle='#7adcc8'; c.font='bold 18px Segoe UI,Malgun Gothic'; c.textAlign='left';
+  c.fillText(`${u.span+1}동`, 14, 26);
+  c.fillStyle = warm ? '#ff8070' : '#9FE1CB'; c.font='12px Segoe UI'; c.textAlign='right';
+  c.fillText(u.mode, 244, 24);
+  // 온도 (대형)
+  c.fillStyle = warm ? '#ff7060' : (cold ? '#5ab0e0' : '#5DCAA5');
+  c.font='bold 46px Segoe UI'; c.textAlign='left';
+  c.fillText(`${s.temp.toFixed(1)}°`, 14, 80);
+  // 습도
+  c.fillStyle='#7ab0e0'; c.font='bold 30px Segoe UI'; c.textAlign='right';
+  c.fillText(`${s.hum.toFixed(0)}%`, 244, 76);
+  // 하단 정보
+  c.fillStyle='#6a9a8a'; c.font='12px Courier New'; c.textAlign='left';
+  c.fillText(`EC ${s.ec.toFixed(2)}  pH ${s.ph.toFixed(2)}`, 14, 108);
+  c.fillStyle='#40e0d0'; c.fillText(`INV ${u.invHz.toFixed(0)}Hz · 팬 ${Math.round(u.hvacLoad)}%`, 14, 128);
+  u.thTex.needsUpdate = true;
+}
+
+/* ── 메인 덕트 공기 흐름 입자 (기계실 → 5동 가로질러 흐름) ── */
+const ductFlowPkts = [];
+const DUCT_X0 = MECH_X-.6, DUCT_X1 = GW*SPAN-0.3;
+for(let i=0;i<10;i++){
+  // 난방(위·주황) 5개 + 냉방(아래·청색) 5개
+  const heat = i<5;
+  const pkt = new THREE.Mesh(new THREE.SphereGeometry(.09,6,5),
+    new THREE.MeshBasicMaterial({color: heat?0xffb070:0x70c8f0, transparent:true, opacity:.8}));
+  facilityLayer.add(pkt);
+  ductFlowPkts.push({ pkt, heat, y: DUCT_Y + (heat?.18:-.18), t: (i%5)/5 });
+}
+// 관수 메인 헤더 흐름 입자 (기계실 → 5동)
+const waterMainPkts = [];
+for(let i=0;i<5;i++){
+  const pkt = new THREE.Mesh(new THREE.SphereGeometry(.08,6,5), new THREE.MeshBasicMaterial({color:0x7af0e0, transparent:true, opacity:.85}));
+  facilityLayer.add(pkt);
+  waterMainPkts.push({ pkt, t: i/5 });
+}
+
 // 메인 펌프/히트펌프 회전 블레이드 참조
-const facAnim = { hpBlades, hpFan, nutrientTanks, pumpLed, waterFlowPkts, airFlowPkts };
+const facAnim = { hpBlades, hpFan, nutrientTanks, pumpLed, waterFlowPkts, airFlowPkts, ductFlowPkts, waterMainPkts, DUCT_X0, DUCT_X1 };
 
 facilityLayer.visible = false;   // 기본 숨김
 
@@ -1667,7 +1763,7 @@ for(let si=0;si<SPAN;si++){
 }
 
 /* ── 카메라 ── */
-let th=.48,ph=.88,rad=58,drag=false,lx=0,ly=0,spin=true;
+let th=.48,ph=.88,rad=92,drag=false,lx=0,ly=0,spin=true;   // GL=50m → 기본 줌 확대
 const tgt=new THREE.Vector3(GW*SPAN/2,2.5,GL/2);
 function uc(){
   cam.position.set(tgt.x+rad*Math.sin(ph)*Math.sin(th),tgt.y+rad*Math.cos(ph),tgt.z+rad*Math.sin(ph)*Math.cos(th));
@@ -1685,7 +1781,7 @@ window.addEventListener('mousemove',e=>{
   th-=(e.clientX-lx)*.0038;ph=Math.max(.06,Math.min(Math.PI*.88,ph-(e.clientY-ly)*.0038));
   lx=e.clientX;ly=e.clientY;uc();
 });
-ren.domElement.addEventListener('wheel',e=>{rad=Math.max(18,Math.min(100,rad+e.deltaY*.05));uc();e.preventDefault();},{passive:false});
+ren.domElement.addEventListener('wheel',e=>{rad=Math.max(18,Math.min(170,rad+e.deltaY*.08));uc();e.preventDefault();},{passive:false});
 
 /* ── 새 타깃 선정 (캐리어는 통로 중심선만 이동) ──
    캐리어는 통로①(A1C) 또는 통로②(A2C)의 X좌표에서 벗어날 수 없음
@@ -2233,11 +2329,12 @@ function loop(ts){
     }
   });
 
-  /* 경고 동 프레임 색 */
+  /* 경고 동 프레임 색 (HW뷰에서는 반투명 페이드 → 네트워크 강조) */
   edgeRefs.forEach((ef,i)=>{
     const w=spans[i].status==='warning';
     ef.material.color.setHex(w?0xEF9F27:0x1d9e75);
-    ef.material.opacity=w?.5:.26;
+    const baseOp = w?.5:.26;
+    ef.material.opacity = hwView ? baseOp*.25 : baseOp;
   });
 
   /* 충전 스테이션 시각화 (C-03 배터리 진행률 반영) */
@@ -2321,8 +2418,50 @@ function loop(ts){
     // ESP32 LoRa 링크 점멸 (송신 펄스 느낌)
     const blink = (Math.sin(t0*.006)+1)*.5;
     loraLinks.forEach((lk,i)=>{
-      lk.line.material.opacity = .2 + blink*.3 * (((i+Math.floor(t0*.002))%3===0)?1:.4);
+      lk.line.material.opacity = .15 + blink*.2 * (((i+Math.floor(t0*.002))%3===0)?1:.3);
     });
+
+    // ── RPi5 데이터 기둥: 수신량(rxRate) 비례 높이·밝기 (생동감 B) ──
+    rpiGateways.forEach(gw=>{
+      const lvl = Math.max(.15, Math.min(1, gw.rxRate / 35));   // 0~1
+      const h = .3 + lvl*1.8;
+      gw.pillar.scale.y = h;
+      gw.pillar.position.y = gw.y + .2 + h/2;   // 바닥 고정 성장
+      const down = gw.k3s==='NotReady', buf = gw.link==='buffer';
+      const col = down ? HW_COL.down : (buf ? HW_COL.buffer : 0x5ee0e8);
+      gw.pillar.material.color.setHex(col);
+      gw.pillar.material.opacity = .35 + lvl*.4 + Math.sin(t0*.004+gw.x)*.08;
+      // 본체 발광도 수신량 따라
+      gw.body.material.emissiveIntensity = .15 + lvl*.3;
+    });
+
+    // ── LoRa 패킷 발사: 매 프레임 일부 노드 → 소속 RPi5로 빛 입자 (생동감 A) ──
+    if(Math.random() < .8){
+      const n = 1 + Math.floor(Math.random()*3);
+      for(let k=0;k<n;k++){
+        const node = esp32Nodes[Math.floor(Math.random()*esp32Nodes.length)];
+        const gw = rpiGateways.find(g=>g.id===node.gwId);
+        if(gw) flyLoraPacket(node, gw);
+      }
+    }
+    // 패킷 비행 갱신 (lerp 이동 + 도착 시 페이드)
+    hwPackets.forEach(p=>{
+      if(!p.active) return;
+      p.t += dt*1.8;
+      if(p.t >= 1){
+        p.active = false; p.mesh.visible = false; return;
+      }
+      const e = 1 - (1-p.t)*(1-p.t);  // ease-out
+      p.mesh.position.set(
+        p.from.x + (p.to.x-p.from.x)*e,
+        p.from.y + (p.to.y-p.from.y)*e,
+        p.from.z + (p.to.z-p.from.z)*e
+      );
+      p.mesh.material.opacity = .9 * (1 - p.t*.5);
+    });
+  } else {
+    // HW뷰 아닐 때 패킷 숨김 (잔상 방지)
+    hwPackets.forEach(p=>{ if(p.active){ p.active=false; p.mesh.visible=false; } });
   }
 
   /* ─ 설비 뷰: 관수 물 흐름 + 공기 흐름 + 회전 팬 ─ */
@@ -2355,6 +2494,32 @@ function loop(ts){
     });
     // 펌프 LED 점멸
     facAnim.pumpLed.material.emissiveIntensity = .4 + (Math.sin(t0*.01)+1)*.3;
+
+    // ── 메인 덕트 공기 흐름 (기계실 → 5동 가로질러, 난방 위/냉방 아래) ──
+    facAnim.ductFlowPkts.forEach(d=>{
+      d.t = (d.t + dt*0.18) % 1;
+      const x = facAnim.DUCT_X0 + (facAnim.DUCT_X1 - facAnim.DUCT_X0) * d.t;
+      d.pkt.position.set(x, d.y, DUCT_Z);
+      d.pkt.material.opacity = .55 + Math.sin(d.t*Math.PI)*.4;
+    });
+    // ── 관수 메인 헤더 흐름 (기계실 → 5동) ──
+    facAnim.waterMainPkts.forEach(w=>{
+      w.t = (w.t + dt*0.16) % 1;
+      const x = facAnim.DUCT_X0 + (facAnim.DUCT_X1 - facAnim.DUCT_X0) * w.t;
+      w.pkt.position.set(x, PIPE_Y, LINE_Z);
+      w.pkt.material.opacity = .55 + Math.sin(w.t*Math.PI)*.4;
+    });
+    // ── 관수 점적 물방울 (드립 호스 → 작물로 떨어짐) ──
+    facUnits.forEach(u=>{
+      const flowing = u.valveOpen > 15;
+      u.dripDrops.forEach(dp=>{
+        if(!flowing){ dp.mesh.material.opacity = 0; return; }
+        dp.t = (dp.t + dt*0.9) % 1;
+        const y = dp.top - dp.t * (dp.top - 0.5);   // 호스 → 바닥
+        dp.mesh.position.set(dp.rx, y, dp.z);
+        dp.mesh.material.opacity = .85 * (1 - dp.t*.5);
+      });
+    });
   }
 
   ren.render(scene,cam);
@@ -2374,6 +2539,8 @@ function buildCards(){
   </div>`).join('');
 }
 buildCards();
+// 총 누리셀 KPI = 실제 인스턴스 수 (5동×4랙×4단×38열)
+(()=>{ const e=document.getElementById('kt-total'); if(e) e.textContent=NDRUM.toLocaleString(); })();
 
 function buildCarrierPanel(){
   document.getElementById('cmon').innerHTML=carriers.map(c=>{
@@ -2735,7 +2902,7 @@ function tick(){
     lo_kpi2.style.color = ready<20 ? '#EF9F27' : '#5DCAA5';
   }
   if(hwView) buildHwPanel();
-  if(facilityView) buildFacPanel();
+  if(facilityView){ buildFacPanel(); facUnits.forEach(drawThPanel); }
 }
 tick();
 
@@ -2763,15 +2930,23 @@ window.setView = function(mode, auto){
   hwLayer.visible = hwView;
   // 설비 레이어 — facility에서만 (아직 미생성 시 안전)
   if(typeof facilityLayer !== 'undefined') facilityLayer.visible = facilityView;
+  // HW뷰: 동 골격 반투명화 → 네트워크 객체만 또렷 (cell/facility는 원복)
+  if(typeof edgeRefs !== 'undefined'){
+    edgeRefs.forEach((ef,i)=>{
+      const warn = spans[i] && spans[i].status==='warning';
+      const baseOp = warn ? .5 : .26;
+      ef.material.opacity = hwView ? baseOp*.25 : baseOp;
+    });
+  }
 
   // 카메라 프리셋
   spin = false; window._focusedCarrierId = null;
   if(hwView){
-    tgt.set(GW*SPAN/2 - 9, 3.2, GL/2);  th = .74; ph = .64; rad = 72;
+    tgt.set(GW*SPAN/2 - 9, 3.2, GL/2);  th = .74; ph = .64; rad = 112;
   }else if(facilityView){
-    tgt.set(GW*SPAN/2 - 6, 2.8, GL/2);  th = .58; ph = .68; rad = 66;
+    tgt.set(GW*SPAN/2 - 6, 2.8, GL/2);  th = .58; ph = .68; rad = 104;
   }else{
-    tgt.set(GW*SPAN/2, 2.5, GL/2);      th = .48; ph = .88; rad = 58; spin = true;
+    tgt.set(GW*SPAN/2, 2.5, GL/2);      th = .48; ph = .88; rad = 92; spin = true;
   }
   uc();
 
