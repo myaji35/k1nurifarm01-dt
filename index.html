@@ -934,9 +934,9 @@ for(let si=0; si<SPAN; si++){
   const ZONE_LEN = (GL-2)/ZONE_N;
   const ventFans = [];              // 존별 {blades, ring} (존 단위 제어용)
   const ventFanBlades = [];         // 전체 블레이드 (잔존 호환)
-  // 유동팬은 작물 캐노피 위 + 차광스크린(5.72) 아래 → 스크린 반투명 너머로 비침
-  const VENT_Y = TY[3] + DR - .05;  // ≈5.08m (랙 최상단 살짝 위, 스크린 아래)
-  const VENT_X = cx;                // 동 중앙
+  // 유동팬: 랙 위로 확실히 띄우고(통로 상공) 크게 → 잘 보이게. 스크린(5.72)보다 약간 아래
+  const VENT_Y = GH - .45;          // ≈5.55m (천장 가까이, 스크린 아래)
+  const VENT_X = ox + A1C;          // 통로① 상공 (랙·배면판에 안 묻힘)
   // 전원/제어 라인 (천장, Z방향)
   facPipe(new THREE.Vector3(VENT_X, VENT_Y+.45, 0.3), new THREE.Vector3(VENT_X, VENT_Y+.45, GL-0.3), .022, 0x4a7a74, .6);
   for(let z=0; z<ZONE_N; z++){
@@ -944,23 +944,24 @@ for(let si=0; si<SPAN; si++){
     const blades = [];
     // 천장 행거 (위 전원라인 → 팬)
     facBox(.04,.42,.04, 0x3a4a48, VENT_X, VENT_Y+.25, fz, .1);
-    // 유동팬 하우징 (링) — Z축 송풍 자세, 밝게
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(.40,.06,8,20), new THREE.MeshLambertMaterial({color:0x4a6a64, emissive:0x1a3a34, emissiveIntensity:.2}));
+    // 유동팬 하우징 (링) — Z축 송풍 자세, 크고 밝게
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(.55,.08,8,22), new THREE.MeshLambertMaterial({color:0x40c0b0, emissive:0x2a8a7c, emissiveIntensity:.5}));
     ring.rotation.y = Math.PI/2; ring.position.set(VENT_X, VENT_Y, fz); facilityLayer.add(ring);
-    const guard = new THREE.Mesh(new THREE.TorusGeometry(.40,.025,4,4), new THREE.MeshLambertMaterial({color:0x6a8078}));
-    guard.rotation.y = Math.PI/2; guard.position.set(VENT_X, VENT_Y, fz); facilityLayer.add(guard);
-    // 팬 블레이드 3장 (Z축 회전) — 밝은 색 + 발광
+    // 팬 블레이드 3장 (Z축 회전) — 밝은 청록 + 강한 발광
     for(let b=0;b<3;b++){
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(.02, .68, .07),
-        new THREE.MeshLambertMaterial({color:0x7ee0d4, emissive:0x2a6a60, emissiveIntensity:.3}));
-      blade.geometry.translate(0,.34,0);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(.03, .96, .12),
+        new THREE.MeshLambertMaterial({color:0x9af0e4, emissive:0x4ac0b0, emissiveIntensity:.6}));
+      blade.geometry.translate(0,.48,0);
       blade.position.set(VENT_X, VENT_Y, fz);
       blade.rotation.z = b*(2*Math.PI/3);
       facilityLayer.add(blade);
       blades.push(blade); ventFanBlades.push(blade);
     }
-    ventFans.push({ blades, ring, zone:z });
-    facLabel(`존${z+1} HAF`, VENT_X, VENT_Y+.65, fz, '#6acfc4', 1.3);
+    // 중심 허브 (발광 — 작동 표시등)
+    const hub = new THREE.Mesh(new THREE.SphereGeometry(.10,8,6), new THREE.MeshBasicMaterial({color:0x9af0e4}));
+    hub.position.set(VENT_X, VENT_Y, fz); facilityLayer.add(hub);
+    ventFans.push({ blades, ring, hub, zone:z });
+    facLabel(`존${z+1} HAF`, VENT_X, VENT_Y+.75, fz, '#7ee0d4', 1.5);
   }
 
   /* ── 천창 (Roof Vent) — 측창 없음. 지붕 능선 따라 Z방향 1열, 구간 분할 개폐
@@ -1036,13 +1037,19 @@ for(let si=0; si<SPAN; si++){
   // 동별 라벨
   facLabel(`${si+1}동`, cx, GH+.3, GL+.6, '#5ee0e8', 1.4);
 
-  /* ── 하우스별 대형 온습도 패널 (동 중앙 상공, 갱신형) ── */
-  const thCv = document.createElement('canvas'); thCv.width=256; thCv.height=140;
-  const thTex = new THREE.CanvasTexture(thCv);
-  const thSpr = new THREE.Sprite(new THREE.SpriteMaterial({map:thTex, transparent:true, depthTest:false}));
-  thSpr.scale.set(4.8, 3.17, 1);   // 288×190 비율(1.52)
-  thSpr.position.set(cx, GH+2.8, GL*0.5);
-  facilityLayer.add(thSpr);
+  /* ── 존별 온습도 패널 (4블록 — 각 블록 끝단(경계)에 배치해 설비 객체를 안 가림) ── */
+  const thPanels = [];   // 존별 {cv, tex, spr}
+  const ZP_LEN = (GL-2)/4;
+  for(let z=0; z<4; z++){
+    const cv = document.createElement('canvas'); cv.width=240; cv.height=150;
+    const tex = new THREE.CanvasTexture(cv);
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
+    spr.scale.set(2.9, 1.81, 1);   // 240×150, 약간 축소
+    // 블록 끝단(경계)에 배치 + 동 측면(통로② 바깥쪽)으로 빼서 천창/팬 시야 확보
+    spr.position.set(cx + GW*0.42, GH+1.1, 1 + ZP_LEN*z + .3);
+    facilityLayer.add(spr);
+    thPanels.push({ cv, tex, spr });
+  }
 
   // 관수 흐름 패킷 (드롭관 따라 흐름)
   const wpkt = new THREE.Mesh(new THREE.SphereGeometry(.06,8,6), new THREE.MeshBasicMaterial({color:0x7af0e0}));
@@ -1075,7 +1082,7 @@ for(let si=0; si<SPAN; si++){
     invHz: 45 + Math.random()*15,                // 인버터 출력 주파수 (Hz) → 팬 속도
     zoneTemp: [0,0,0,0], zoneHum: [0,0,0,0],     // 4존 온습도 중앙값
     zoneFanHz: [40,40,40,40],                    // 4존 유동팬 주파수
-    thCv, thTex, thSpr, dripDrops,               // 대형 온습도 패널 + 점적 물방울
+    thPanels, dripDrops,                         // 존별 온습도 패널 4개 + 점적 물방울
     roofVents, ventOpen: 30 + Math.random()*40,  // 천창 + 개폐율 %
     co2Jets, co2ppm: 700 + Math.random()*300,    // CO₂ 인젝터 + 농도 ppm
     screenGrp,
@@ -1086,41 +1093,45 @@ for(let si=0; si<SPAN; si++){
 /* 동별 온습도 패널 그리기 (tick에서 호출) — 가독성 튜닝 */
 function drawThPanel(u){
   const s = spans[u.span];
-  if(!s) return;
-  const c = u.thCv.getContext('2d');
-  const W=288, H=190; if(u.thCv.width!==W){ u.thCv.width=W; u.thCv.height=H; }
-  c.clearRect(0,0,W,H);
-  const warm = s.temp > 26, cold = s.temp < 22;
-  const accent = warm ? '#ff6160' : (cold ? '#3aa0e0' : '#2ec4b6');
-  // 배경 + 헤더 바
-  c.fillStyle='rgba(10,26,36,.95)'; c.fillRect(0,0,W,H);
-  c.fillStyle = accent; c.fillRect(0,0,W,32);
-  c.strokeStyle = accent; c.lineWidth=3; c.strokeRect(2,2,W-4,H-4);
-  // 헤더: 동 번호 + 모드
-  c.fillStyle='#06141c'; c.font='bold 20px Segoe UI,Malgun Gothic'; c.textAlign='left';
-  c.fillText(`${u.span+1}동`, 14, 23);
-  c.font='bold 14px Segoe UI'; c.textAlign='right';
-  c.fillText(u.mode, W-14, 22);
-  // 온도 (대형) + 습도
-  c.fillStyle = warm ? '#ff7060' : (cold ? '#6ab8e8' : '#5DCAA5');
-  c.font='bold 52px Segoe UI'; c.textAlign='left';
-  c.fillText(`${s.temp.toFixed(1)}°`, 14, 88);
-  c.fillStyle='#8ac0ea'; c.font='bold 34px Segoe UI'; c.textAlign='right';
-  c.fillText(`${s.hum.toFixed(0)}%`, W-14, 84);
-  c.fillStyle='#6a9a8a'; c.font='11px Segoe UI'; c.textAlign='left'; c.fillText('기온', 16, 104);
-  c.textAlign='right'; c.fillText('습도', W-16, 104);
-  // 구분선
-  c.strokeStyle='rgba(106,154,138,.3)'; c.lineWidth=1; c.beginPath(); c.moveTo(12,118); c.lineTo(W-12,118); c.stroke();
-  // 하단 2열: 좌(관수/양액) 우(환경제어)
-  c.font='13px Courier New'; c.textAlign='left';
-  c.fillStyle='#7af0e0'; c.fillText(`EC ${s.ec.toFixed(2)}  pH ${s.ph.toFixed(2)}`, 14, 138);
-  c.fillStyle='#e8e0a0'; c.fillText(`CO₂ ${Math.round(u.co2ppm)} ppm`, 14, 158);
-  c.fillStyle='#40e0d0'; c.fillText(`INV ${u.invHz.toFixed(0)}Hz`, 14, 178);
-  c.textAlign='right';
-  c.fillStyle='#5ee0e8'; c.fillText(`천창 ${Math.round(u.ventOpen)}%`, W-14, 138);
-  c.fillStyle = u.scrOpen>10 ? '#d0d8e0' : '#4a5258'; c.fillText(`차광 ${Math.round(u.scrOpen)}%`, W-14, 158);
-  c.fillStyle='#ffae6a'; c.fillText(`팬 ${Math.round(u.hvacLoad)}%`, W-14, 178);
-  u.thTex.needsUpdate = true;
+  if(!s || !u.thPanels) return;
+  const W=240, H=150;
+  // 존별 4개 패널 각각 그리기
+  for(let z=0; z<4; z++){
+    const p = u.thPanels[z];
+    const c = p.cv.getContext('2d');
+    const zt = u.zoneTemp[z] || s.temp;
+    const zh = u.zoneHum[z]  || s.hum;
+    const scrAvg = ((u.scrL[z]||0)+(u.scrR[z]||0))/2;
+    const fanHz = u.zoneFanHz[z] || 40;
+    const warm = zt > 26, cold = zt < 22;
+    const accent = warm ? '#ff6160' : (cold ? '#3aa0e0' : '#2ec4b6');
+    c.clearRect(0,0,W,H);
+    c.fillStyle='rgba(10,26,36,.95)'; c.fillRect(0,0,W,H);
+    c.fillStyle = accent; c.fillRect(0,0,W,26);
+    c.strokeStyle = accent; c.lineWidth=2; c.strokeRect(1,1,W-2,H-2);
+    // 헤더: 동·존
+    c.fillStyle='#06141c'; c.font='bold 15px Segoe UI,Malgun Gothic'; c.textAlign='left';
+    c.fillText(`${u.span+1}동 · 존${z+1}`, 10, 19);
+    c.font='bold 11px Segoe UI'; c.textAlign='right'; c.fillText(u.mode, W-10, 18);
+    // 온도(대형) + 습도
+    c.fillStyle = warm ? '#ff7060' : (cold ? '#6ab8e8' : '#5DCAA5');
+    c.font='bold 40px Segoe UI'; c.textAlign='left';
+    c.fillText(`${zt.toFixed(1)}°`, 10, 66);
+    c.fillStyle='#8ac0ea'; c.font='bold 26px Segoe UI'; c.textAlign='right';
+    c.fillText(`${zh.toFixed(0)}%`, W-10, 62);
+    // 구분선
+    c.strokeStyle='rgba(106,154,138,.3)'; c.lineWidth=1; c.beginPath(); c.moveTo(8,82); c.lineTo(W-8,82); c.stroke();
+    // 하단: 환경제어 (존 단위)
+    c.font='11px Courier New'; c.textAlign='left';
+    c.fillStyle='#5ee0e8'; c.fillText(`천창 ${Math.round(u.ventOpen)}%`, 10, 102);
+    c.fillStyle = scrAvg>10 ? '#d0d8e0' : '#4a5258'; c.fillText(`차광 ${Math.round(scrAvg)}%`, 10, 122);
+    c.fillStyle='#6acfc4'; c.fillText(`유동팬 ${fanHz.toFixed(0)}Hz`, 10, 142);
+    c.textAlign='right';
+    c.fillStyle='#7af0e0'; c.fillText(`EC ${s.ec.toFixed(2)}`, W-10, 102);
+    c.fillStyle='#7af0e0'; c.fillText(`pH ${s.ph.toFixed(2)}`, W-10, 122);
+    c.fillStyle='#e8e0a0'; c.fillText(`CO₂ ${Math.round(u.co2ppm)}`, W-10, 142);
+    p.tex.needsUpdate = true;
+  }
 }
 
 /* ── 메인 덕트 공기 흐름 입자 (기계실 → 5동 가로질러 흐름) ── */
