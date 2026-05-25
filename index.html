@@ -1929,8 +1929,8 @@ for(let si=0;si<SPAN;si++){
 }
 
 /* ── 카메라 ── */
-let th=.48,ph=.88,rad=92,drag=false,lx=0,ly=0,spin=true;   // GL=50m → 기본 줌 확대
-const tgt=new THREE.Vector3(GW*SPAN/2,2.5,GL/2);
+let th=.48,ph=1.05,rad=88,drag=false,lx=0,ly=0,spin=true;   // 위에서 내려다봄(ph↑) → 농장 화면 중앙 정렬(상단 공백 방지)
+const tgt=new THREE.Vector3(GW*SPAN/2,4.0,GL/2);            // 타깃 높이 농장 중심으로 상향
 function uc(){
   cam.position.set(tgt.x+rad*Math.sin(ph)*Math.sin(th),tgt.y+rad*Math.cos(ph),tgt.z+rad*Math.sin(ph)*Math.cos(th));
   cam.lookAt(tgt);
@@ -3325,7 +3325,7 @@ window.setView = function(mode, auto){
   }else if(facilityView){
     tgt.set(GW*SPAN/2 - 6, 2.8, GL/2);  th = .58; ph = .68; rad = 104;
   }else if(!cockpitView){
-    tgt.set(GW*SPAN/2, 2.5, GL/2);      th = .48; ph = .88; rad = 92; spin = true;
+    tgt.set(GW*SPAN/2, 4.0, GL/2);      th = .48; ph = 1.05; rad = 88; spin = true;
   }
   uc();
 
