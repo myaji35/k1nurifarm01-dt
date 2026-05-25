@@ -225,6 +225,8 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
     <div id="hvl" class="env-only"></div>
     <div class="ptit env-only" style="margin-top:8px">AMR 셔틀 운행 로그</div>
     <div id="amrl" class="env-only" style="font-size:11px;line-height:1.6;color:#6a9a8a"></div>
+    <div class="ptit env-only" style="margin-top:8px">입출고 추적 이력 (누리셀 ↔ 랙)</div>
+    <div id="traceLog" class="env-only" style="font-size:10px;line-height:1.5;color:#8fb0a4;font-family:'Courier New',monospace"></div>
 
     <!-- 하드웨어 뷰 전용 패널 (우) -->
     <div id="hwPanelR" style="display:none">
@@ -499,6 +501,28 @@ function stageFromDay(d){
 // 누리셀 발육 데이터
 const dayOld   = new Float32Array(NDRUM);  // 생장 일수 (실수, 시간 단위 보간)
 const dstage   = new Uint8Array(NDRUM);    // 현재 발육 단계 (0~3)
+
+/* ── 추적성(traceability): 누리셀 고유번호 + 랙 슬롯 ID + 입출고 이력 ──
+   누리셀(드럼)은 NC-xxxxx 고유번호. 랙 슬롯(고정 위치)은 동-랙-단-열 ID.
+   OUT(수확 추출)·IN(자재 식재) 시 어떤 누리셀이 어느 슬롯에 들고나는지 이력 기록. */
+let _ncSeq = 1;
+function nextCellId(){ return 'NC-' + String(_ncSeq++).padStart(5,'0'); }
+const cellId = new Array(NDRUM);                // 인덱스별 현재 적재 누리셀 고유번호
+for(let i=0;i<NDRUM;i++) cellId[i] = nextCellId();
+// 랙 슬롯 ID (위치 결정적): idx → "{동}동-R{랙}-{단}단-{열}열"
+function rackSlotId(i){
+  const di = i % DZ_N;
+  const ti = Math.floor(i/DZ_N) % TY.length;
+  const ri = Math.floor(i/(DZ_N*TY.length)) % RACKXC.length;
+  const si = Math.floor(i/(DZ_N*TY.length*RACKXC.length));
+  return `${si+1}동-R${ri+1}-${ti+1}단-${di+1}열`;
+}
+// 입출고 이력 (최근 N건, 우패널 표시 + 내보내기 가능)
+const traceLog = [];   // { ts, action:'OUT'|'IN', cell:'NC-..', slot:'1동-R2-3단-15열', crop }
+function pushTrace(action, cellNo, slotIdx, cropName){
+  traceLog.unshift({ ts: new Date().toTimeString().slice(0,8), action, cell: cellNo, slot: rackSlotId(slotIdx), crop: cropName });
+  if(traceLog.length > 40) traceLog.pop();
+}
 // 수확시점 고려 staggered 배치 (대표님 통찰: 처음부터 예상 수확시점 분산 식재):
 //   각 누리셀의 생장일을 황금비 저불일치 수열로 위상 부여 → 30일 사이클이
 //   시간·공간 모두 균등 분산. 매 시뮬 구간 전체의 ~1/30만 수확단계 도달 →
@@ -2056,6 +2080,7 @@ function pickNewTarget(c){
     c.targetX = spanIdx*GW + (c.aisle===0?A1C:A2C);
     c.targetZ = rng(1.5, GL-1.5);
     c.targetTierY = TY[1];
+    c.targetCell = -1;
     return;
   }
   const aisle = cellAisle(best);
@@ -2063,6 +2088,7 @@ function pickNewTarget(c){
   c.targetX = cellSpan(best)*GW + (aisle===0?A1C:A2C);
   c.targetZ = cellZ(best);
   c.targetTierY = cellTierY(best);               // 조정실 카메라 상하 포커스용 (작업 셀의 단 높이)
+  c.targetCell = best;                           // 작업 대상 누리셀 인덱스 (추적 기록용)
 }
 
 /* ── 메인 루프 ── */
@@ -2468,6 +2494,11 @@ function loop(ts){
         armLerp(arm, Math.min(1, dt*2.5), POSE_HOME);
       }else{
         c.carrying = true;
+        // 추적: 수확 누리셀을 랙에서 추출(OUT) — 어느 누리셀이 어느 슬롯에서 나갔는지
+        if(c.targetCell >= 0){
+          c.outCell = c.targetCell;                       // IN 식재 시 같은 슬롯에 새 셀
+          pushTrace('OUT', cellId[c.targetCell], c.targetCell, cropOf(cellSpan(c.targetCell)).name);
+        }
         c.state = 5;  // AMR 도착 대기
         c.stateTimer = 0;
         // 작업 큐에 OUT 픽업 요청 push (중복 방지) + 임박도 priority
@@ -2577,6 +2608,13 @@ function loop(ts){
         armLerp(arm, Math.min(1, dt*3), POSE_HOME);
       }else{
         // 사이클 완료
+        // 추적: 새 자재 누리셀을 빈 슬롯에 식재(IN) — 새 고유번호 발급
+        if(c.outCell != null && c.outCell >= 0){
+          const newId = nextCellId();
+          cellId[c.outCell] = newId;                      // 슬롯에 새 누리셀 적재
+          pushTrace('IN', newId, c.outCell, cropOf(cellSpan(c.outCell)).name);
+          c.outCell = null;
+        }
         c.cycles++;
         if(c.cycleStart > 0){
           const cycleSec = (Date.now() - c.cycleStart) / 1000;
@@ -2968,6 +3006,18 @@ function buildAvnPanel(){
 }
 buildAvnPanel();
 
+// 입출고 추적 이력 렌더 (tick마다 갱신 — 실시간)
+function renderTraceLog(){
+  const tl = document.getElementById('traceLog');
+  if(!tl) return;
+  if(traceLog.length === 0){ tl.innerHTML = '<span style="color:#5a7a6e">수집 중…</span>'; return; }
+  tl.innerHTML = traceLog.slice(0,8).map(e=>{
+    const ac = e.action==='OUT' ? '#ffa040' : '#7ad4ff';
+    const arrow = e.action==='OUT' ? '↑추출' : '↓식재';
+    return `<div style="display:flex;justify-content:space-between;gap:6px"><span><span style="color:${ac}">${arrow}</span> ${e.cell}</span><span style="color:#6a9a8a">${e.slot}</span></div>`;
+  }).join('');
+}
+
 document.getElementById('hvl').innerHTML=spans.map((s,i)=>{
   const t=['08:30','10:00','11:30','13:00','14:30'][i];
   return`<div class="hi"><span class="hn">${s.id}동</span><span class="hc">${s.harv}기</span><span class="ht">${t}</span></div>`;
@@ -3105,6 +3155,7 @@ function tick(){
   const amrActive = amrPool.filter(a=>a.state!==5).length;
   const amrKpi = document.getElementById('kt-amr');
   if(amrKpi) amrKpi.textContent = `${amrActive}/${amrPool.length}`;
+  renderTraceLog();   // 입출고 추적 이력 실시간 갱신
   amrPool.forEach(a=>{
     const card=document.getElementById('ac-'+a.id);
     if(!card)return;
