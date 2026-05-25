@@ -928,36 +928,35 @@ for(let si=0; si<SPAN; si++){
   // 인버터 → 양액펌프/관수 밸브 제어선 (지면 따라)
   facPipe(new THREE.Vector3(invX-.2, .2, invZ), new THREE.Vector3(cx, TY[3]+DR+.5, LINE_Z), .018, 0x2a8a9a, .45);
 
-  /* ── 공기순환 유동팬(HAF): 통로별 2대 (동당 4대) — 통로① ② 천장에 매달림
-     공기를 Z축(길이방향)으로 수평 순환. 인버터(VFD)가 회전속도 가변 제어 ── */
-  const ventFanBlades = [];
-  const VENT_Y = GH - .55;          // 통로 천장에 매달림
-  const fanZs  = [GL*0.32, GL*0.70]; // 통로당 2대 (앞·뒤)
-  AISLE_XC.forEach((ac, ai)=>{
-    const ax = ox + ac;
-    // 통로별 전원/제어 라인 (천장, Z방향)
-    facPipe(new THREE.Vector3(ax, VENT_Y+.35, 0.3), new THREE.Vector3(ax, VENT_Y+.35, GL-0.3), .022, 0x4a7a74, .55);
-    fanZs.forEach(fz=>{
-      // 천장 마운트 브래킷
-      facBox(.05,.35,.05, 0x3a4a48, ax, VENT_Y+.25, fz, .05);
-      // 유동팬 하우징 (링) — 수평 송풍(축이 Z방향) → 링이 X평면에 섬
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(.34,.045,6,18), new THREE.MeshLambertMaterial({color:0x3a4a48}));
-      ring.rotation.y = Math.PI/2;   // Z축 송풍 자세 (링이 Z축 향함)
-      ring.position.set(ax, VENT_Y, fz); facilityLayer.add(ring);
-      // 가드 그릴
-      const guard = new THREE.Mesh(new THREE.TorusGeometry(.34,.02,4,4), new THREE.MeshLambertMaterial({color:0x5a6a64}));
-      guard.rotation.y = Math.PI/2; guard.position.set(ax, VENT_Y, fz); facilityLayer.add(guard);
-      // 팬 블레이드 3장 (Z축 회전 → 공기를 Z방향으로 밀어냄)
-      for(let b=0;b<3;b++){
-        const blade = facBox(.015, .58, .05, 0x6acfc4, ax, VENT_Y, fz);
-        blade.geometry.translate(0,.29,0);
-        blade.rotation.z = b*(2*Math.PI/3);   // X평면에서 회전
-        ventFanBlades.push(blade);
-      }
-    });
-    // 통로 라벨 (유동팬 표시)
-    facLabel(`통로${ai===0?'①':'②'} HAF`, ax, VENT_Y+.7, GL*0.5, '#6acfc4', 1.5);
-  });
+  /* ── 공기순환 유동팬(HAF): 4존(블록)별 1대 = 동당 4대 — 동 중앙선 천장
+     각 존의 온습도 중앙값에 맞춰 인버터(VFD) 가변속 제어. Z축 수평 송풍 ── */
+  const ZONE_N = 4;
+  const ZONE_LEN = (GL-2)/ZONE_N;
+  const ventFans = [];              // 존별 {blades, ring} (존 단위 제어용)
+  const ventFanBlades = [];         // 전체 블레이드 (잔존 호환)
+  const VENT_Y = GH - .55;
+  // 동 중앙 전원/제어 라인 (천장, Z방향)
+  facPipe(new THREE.Vector3(cx, VENT_Y+.35, 0.3), new THREE.Vector3(cx, VENT_Y+.35, GL-0.3), .022, 0x4a7a74, .55);
+  for(let z=0; z<ZONE_N; z++){
+    const fz = 1 + ZONE_LEN*(z+.5);   // 존 중앙 Z
+    const blades = [];
+    // 천장 마운트 브래킷
+    facBox(.05,.35,.05, 0x3a4a48, cx, VENT_Y+.25, fz, .05);
+    // 유동팬 하우징 (링) — Z축 송풍 자세
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(.36,.05,6,18), new THREE.MeshLambertMaterial({color:0x3a4a48}));
+    ring.rotation.y = Math.PI/2; ring.position.set(cx, VENT_Y, fz); facilityLayer.add(ring);
+    const guard = new THREE.Mesh(new THREE.TorusGeometry(.36,.02,4,4), new THREE.MeshLambertMaterial({color:0x5a6a64}));
+    guard.rotation.y = Math.PI/2; guard.position.set(cx, VENT_Y, fz); facilityLayer.add(guard);
+    // 팬 블레이드 3장 (Z축 회전)
+    for(let b=0;b<3;b++){
+      const blade = facBox(.015, .62, .05, 0x6acfc4, cx, VENT_Y, fz);
+      blade.geometry.translate(0,.31,0);
+      blade.rotation.z = b*(2*Math.PI/3);
+      blades.push(blade); ventFanBlades.push(blade);
+    }
+    ventFans.push({ blades, ring, zone:z });
+    facLabel(`존${z+1} HAF`, cx, VENT_Y+.7, fz, '#6acfc4', 1.3);
+  }
 
   /* ── 천창 (Roof Vent) — 측창 없음. 지붕 능선 따라 Z방향 1열, 구간 분할 개폐
      기온 높을수록 더 열림(자연환기). 경첩으로 한쪽이 들리는 패널 ── */
@@ -1063,11 +1062,13 @@ for(let si=0; si<SPAN; si++){
     flowLpm: 0,                                  // 유량 L/min
     ec: spans[si] ? spans[si].ec : 2.0,
     ph: spans[si] ? spans[si].ph : 6.0,
-    fcu, ventFanBlades, inverter, invLed,
+    fcu, ventFanBlades, ventFans, inverter, invLed,
     supplyTemp: 18 + Math.random()*4,            // 공급 온도
     hvacLoad: 40 + Math.random()*40,             // 가동률 %
     mode: Math.random()<.5 ? '냉방' : '난방',
     invHz: 45 + Math.random()*15,                // 인버터 출력 주파수 (Hz) → 팬 속도
+    zoneTemp: [0,0,0,0], zoneHum: [0,0,0,0],     // 4존 온습도 중앙값
+    zoneFanHz: [40,40,40,40],                    // 4존 유동팬 주파수
     thCv, thTex, thSpr, dripDrops,               // 대형 온습도 패널 + 점적 물방울
     roofVents, ventOpen: 30 + Math.random()*40,  // 천창 + 개폐율 %
     co2Jets, co2ppm: 700 + Math.random()*300,    // CO₂ 인젝터 + 농도 ppm
@@ -2571,10 +2572,12 @@ function loop(ts){
     });
     // 히트펌프 팬 회전
     facAnim.hpBlades.forEach(b=>{ b.rotation.z += dt*6; });
-    // 유동팬(HAF) 회전 — 인버터 출력 주파수(invHz)에 비례 (VFD 가변속). Z축 송풍
+    // 유동팬(HAF) 회전 — 존별 주파수(zoneFanHz)에 비례 (VFD 가변속). Z축 송풍
     facUnits.forEach(u=>{
-      const spd = (u.invHz/50) * 10;   // 50Hz=정격, 비례 회전
-      u.ventFanBlades.forEach(b=>{ b.rotation.z += dt*spd; });
+      u.ventFans.forEach((vf, z)=>{
+        const spd = ((u.zoneFanHz[z]||40)/50) * 11;   // 존 주파수 비례 회전
+        vf.blades.forEach(b=>{ b.rotation.z += dt*spd; });
+      });
       // 인버터 LED 점멸 (가동 표시)
       if(u.invLed) u.invLed.material.emissiveIntensity = .4 + (Math.sin(t0*.012)+1)*.3;
     });
@@ -3287,37 +3290,63 @@ function simFacility(){
     const tempErr = Math.abs(t - 23);
     u.invHz = Math.max(20, Math.min(60, 35 + tempErr*8 + (Math.random()-.5)*3));
 
-    // 천창 개폐율: 기온 높을수록 더 열림 (자연환기). 25°C 기준 점진
+    // ── 존(블록) 단위 환경: 4존 온습도 중앙값 ──
+    // 유동팬(HAF) 목적 = 길이방향 온습도 편차 축소(강제 공기순환).
+    // 자연상태: 입구→안쪽 온습도 편차 발생 / 팬 가동 시: 평균으로 수렴(균일화)
+    const avgZT = u.zoneTemp.reduce((a,b)=>a+b,0)/4;
+    const avgZH = u.zoneHum.reduce((a,b)=>a+b,0)/4;
+    for(let z=0; z<4; z++){
+      // 자연 편차(입구 시원·안쪽 더움)로 끌리는 힘
+      const natT = t + (z-1.5)*0.9 + (Math.random()-.5)*0.4;
+      const natH = (s?s.hum:70) + (z-1.5)*2.2 + (Math.random()-.5)*1.5;
+      u.zoneTemp[z] += (natT - u.zoneTemp[z]) * 0.18;
+      u.zoneHum[z]  += (natH - u.zoneHum[z])  * 0.18;
+      // 유동팬 균일화: 팬 주파수 비례로 존값을 동 평균쪽으로 당김
+      const mix = ((u.zoneFanHz[z]||40)/60) * 0.22;   // 팬 빠를수록 강하게 섞임
+      u.zoneTemp[z] += (avgZT - u.zoneTemp[z]) * mix;
+      u.zoneHum[z]  += (avgZH - u.zoneHum[z])  * mix;
+    }
+    // 길이방향 온도 편차 (max-min) — 유동팬 제어 입력
+    const ztMax = Math.max(...u.zoneTemp), ztMin = Math.min(...u.zoneTemp);
+    u.zoneTempSpread = ztMax - ztMin;
+    // 천창 개폐율: 기온 높을수록 더 열림 (동 평균 기준)
     const ventTarget = Math.max(0, Math.min(100, (t - 22) * 28 + (Math.random()-.5)*6));
     u.ventOpen += (ventTarget - u.ventOpen) * 0.15;
-    // CO₂ 농도: 주간(광합성) 공급 → 800~1000ppm, 야간 낮음. 분사 시 변동
+    // CO₂ 농도: 주간(광합성) 공급
     const co2Target = solRatio > 0.15 ? 850 + solRatio*200 : 450 + Math.random()*80;
     u.co2ppm += (co2Target - u.co2ppm) * 0.1;
-    // 알루미늄 차광스크린: 일사량 多 + 고온 시 전개
-    // 좌/우 스크린 각각 4조각 독립 제어 (구간별 일사·온도차 대응)
-    const scrBase = (solRatio > 0.5 && t > 25)
-      ? Math.min(100, (solRatio-0.5)*120 + (t-25)*15)
-      : (solRatio > 0.7 ? (solRatio-0.7)*200 : 0);
+
+    // ── 차광스크린(좌/우 4조각) + 유동팬(4존): 각 존 온습도 중앙값으로 제어 ──
     let scrSum = 0;
-    for(let bi=0; bi<4; bi++){
-      // 좌/우·조각마다 약간의 편차 (조각별 그늘/일사 차이)
-      const tgtL = Math.max(0, Math.min(100, scrBase + (bi-1.5)*7 + (Math.random()-.5)*5));
-      const tgtR = Math.max(0, Math.min(100, scrBase + (bi-1.5)*7 + 4 + (Math.random()-.5)*5));  // 우측 약간 더
-      u.scrL[bi] += (tgtL - u.scrL[bi]) * 0.08;
-      u.scrR[bi] += (tgtR - u.scrR[bi]) * 0.08;
-      // 3D 반영 (조각별 좌/우 X스케일 독립)
-      const blk = u.screenGrp && u.screenGrp.blocks[bi];
+    for(let z=0; z<4; z++){
+      const zt = u.zoneTemp[z];
+      // 존 차광율: 일사 + 존 온도. 더운 존일수록 더 닫음
+      const scrBase = (solRatio > 0.45 && zt > 24.5)
+        ? Math.min(100, (solRatio-0.45)*130 + (zt-24.5)*16)
+        : (solRatio > 0.7 ? (solRatio-0.7)*200 : 0);
+      // 좌/우 약간의 편차 (한쪽이 더 일사 받음)
+      const tgtL = Math.max(0, Math.min(100, scrBase + (Math.random()-.5)*5));
+      const tgtR = Math.max(0, Math.min(100, scrBase + 4 + (Math.random()-.5)*5));
+      u.scrL[z] += (tgtL - u.scrL[z]) * 0.08;
+      u.scrR[z] += (tgtR - u.scrR[z]) * 0.08;
+      const blk = u.screenGrp && u.screenGrp.blocks[z];
       if(blk){
-        blk.L.scale.x = Math.max(0.001, u.scrL[bi]/100);
-        blk.R.scale.x = Math.max(0.001, u.scrR[bi]/100);
+        blk.L.scale.x = Math.max(0.001, u.scrL[z]/100);
+        blk.R.scale.x = Math.max(0.001, u.scrR[z]/100);
       }
-      scrSum += u.scrL[bi] + u.scrR[bi];
+      scrSum += u.scrL[z] + u.scrR[z];
+      // 존 유동팬 주파수: 길이방향 편차(spread) 클수록 빠르게 (강제 공기순환 → 편차 축소)
+      // + 해당 존이 평균에서 벗어난 정도도 가중
+      const devFromAvg = Math.abs(u.zoneTemp[z] - avgZT);
+      const fanTgt = Math.max(15, Math.min(60, 22 + (u.zoneTempSpread||0)*22 + devFromAvg*10 + (Math.random()-.5)*3));
+      u.zoneFanHz[z] += (fanTgt - u.zoneFanHz[z]) * 0.12;
     }
     u.scrOpen = scrSum/8;  // 전체 평균 (패널/로그용)
 
     // 드물게 이벤트
     if(Math.random() < 0.008){
       if(u.ec > 2.4) pushFacLog(`<span style="color:#EF9F27">⚠</span> ${u.span+1}동 EC ${u.ec.toFixed(2)} 높음 → 희석수 밸브 개방`);
+      else if((u.zoneTempSpread||0) > 1.5) pushFacLog(`<span style="color:#6acfc4">↻</span> ${u.span+1}동 길이방향 편차 ${u.zoneTempSpread.toFixed(1)}°C → 유동팬 강제순환`);
       else if(u.scrOpen > 60) pushFacLog(`<span style="color:#c8d0d8">▦</span> ${u.span+1}동 차광스크린 ${u.scrOpen.toFixed(0)}% 전개 (일사 차단)`);
       else if(u.ventOpen > 70) pushFacLog(`<span style="color:#5ee0e8">△</span> ${u.span+1}동 천창 ${u.ventOpen.toFixed(0)}% 개방 (자연환기)`);
       else if(u.mode==='냉방') pushFacLog(`<span style="color:#2ec4b6">●</span> ${u.span+1}동 냉방 가동 · 공급 ${u.supplyTemp.toFixed(1)}°C`);
@@ -3385,12 +3414,20 @@ function buildFacPanel(){
   if(hr) hr.innerHTML = facUnits.map(u=>{
     const col = u.mode==='냉방'?'#2a7fd4':u.mode==='난방'?'#ff7a3c':'#7a9a8a';
     const scrCol = u.scrOpen>10 ? '#d0d8e0' : '#6a9a8a';
+    const spread = u.zoneTempSpread||0;
+    const spreadCol = spread>1.5 ? '#EF9F27' : (spread>0.8 ? '#e6c838' : '#5DCAA5');
+    // 존별 유동팬 미니 막대 (4존)
+    const zoneFanBars = (u.zoneFanHz||[40,40,40,40]).map((hz,zi)=>{
+      const pct = Math.round((hz-15)/45*100);
+      return `<div style="flex:1;text-align:center"><div style="height:18px;display:flex;align-items:flex-end;justify-content:center"><div style="width:8px;height:${Math.max(10,pct)}%;background:#6acfc4;border-radius:1px"></div></div><span style="font-size:8px;color:#6a9a8a">Z${zi+1}</span></div>`;
+    }).join('');
     return `<div class="ccard active" style="border-color:${col}44;padding:6px 9px">
       <div class="ch"><span class="cn" style="color:#ffae6a;font-size:12px">${u.span+1}동 환경제어</span><span class="cstate ${u.mode==='냉방'?'chg':'pick'}" style="font-size:9px">${u.mode}</span></div>
-      <div class="crow"><span class="ck">공급온도</span><span class="cv">${u.supplyTemp.toFixed(1)}°C · 팬 ${Math.round(u.hvacLoad)}%</span></div>
-      <div class="crow"><span class="ck">인버터 출력</span><span class="cv" style="color:#40e0d0">${u.invHz.toFixed(1)} Hz</span></div>
+      <div class="crow"><span class="ck">공급온도</span><span class="cv">${u.supplyTemp.toFixed(1)}°C · FCU ${Math.round(u.hvacLoad)}%</span></div>
       <div class="crow"><span class="ck">천창 / CO₂</span><span class="cv"><span style="color:#5ee0e8">${Math.round(u.ventOpen)}%</span> / <span style="color:#e8e0a0">${Math.round(u.co2ppm)}ppm</span></span></div>
       <div class="crow"><span class="ck">차광스크린</span><span class="cv" style="color:${scrCol}">${Math.round(u.scrOpen)}% ${u.scrOpen>10?'전개':'접힘'}</span></div>
+      <div class="crow"><span class="ck">길이방향 편차</span><span class="cv" style="color:${spreadCol}">${spread.toFixed(1)}°C</span></div>
+      <div style="margin-top:4px"><div style="font-size:8px;color:#6a9a8a;margin-bottom:1px">존별 유동팬(HAF)</div><div style="display:flex;gap:2px;align-items:flex-end">${zoneFanBars}</div></div>
     </div>`;
   }).join('');
   // 로그
