@@ -89,6 +89,10 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 .tab.active{color:#9FE1CB;background:rgba(12,30,52,.95);border-color:rgba(29,158,117,.5);border-bottom:1px solid rgba(12,30,52,.95)}
 .tab.active[data-view="hw"]{color:#ff9070;border-color:rgba(196,64,48,.55)}
 .tab.active[data-view="facility"]{color:#5ee0e8;border-color:rgba(0,176,208,.55)}
+.tab.active.autoplay{animation:autopulse 1.4s ease-in-out infinite}
+@keyframes autopulse{0%,100%{box-shadow:0 0 0 0 rgba(120,224,200,.0)}50%{box-shadow:0 -2px 12px 0 rgba(120,224,200,.45)}}
+#autoBanner{display:none;align-items:center;gap:6px;margin-left:10px;font-size:10px;color:#7ae0c8;background:rgba(46,196,182,.12);border:1px solid rgba(46,196,182,.35);border-radius:4px;padding:3px 9px;white-space:nowrap}
+#autoBanner .dot{width:6px;height:6px;border-radius:50%;background:#7ae0c8;animation:bl 1.2s infinite}
 </style>
 </head>
 <body>
@@ -96,6 +100,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   <button class="tab active" data-view="cell"     onclick="setView('cell')">🌱 누리셀</button>
   <button class="tab"        data-view="hw"       onclick="setView('hw')">🖧 HW</button>
   <button class="tab"        data-view="facility" onclick="setView('facility')">🔧 관수 · 냉난방 설비</button>
+  <div id="autoBanner"><span class="dot"></span>AUTO 순환 재생 중 · 조작 시 정지</div>
 </div>
 <div id="top">
   <div id="logo">k1NuriFarm01 DT Monitering<small>SMART FARM DIGITAL TWIN · 5-SPAN · STRADDLE CARRIER FLEET</small></div>
@@ -2740,7 +2745,9 @@ tick();
    'hw'       하드웨어 토폴로지 (누리셀·물류 숨김)
    'facility' 관수·냉난방 설비 (누리셀·물류·하드웨어 숨김)
    ══════════════════════════════════════════════════════ */
-window.setView = function(mode){
+window.setView = function(mode, auto){
+  // 사용자 클릭(auto가 아님)이면 자동 순환 중단 + idle 타이머 리셋
+  if(!auto && typeof userInteracted === 'function') userInteracted();
   currentView = mode;
   hwView       = (mode === 'hw');
   facilityView = (mode === 'facility');
@@ -2786,6 +2793,53 @@ window.setView = function(mode){
 };
 // 기존 호출 호환
 window.toggleView = function(){ window.setView(currentView==='cell' ? 'hw' : 'cell'); };
+
+/* ══════════════════════════════════════════════════════
+   탭 자동 순환 (키오스크/전시 모드)
+   - 사용자 무조작 IDLE_MS 후 자동 슬라이드쇼 시작
+   - ROTATE_MS 간격으로 누리셀 → HW → 설비 → … 순환
+   - 사용자 조작(탭 클릭·마우스·휠·키·터치) 시 즉시 중단 + idle 타이머 리셋
+   ══════════════════════════════════════════════════════ */
+const VIEW_ORDER = ['cell','hw','facility'];
+const IDLE_MS   = 20000;   // 20초 무조작 → 자동 순환 시작
+const ROTATE_MS = 12000;   // 12초마다 다음 탭
+let idleTimer = null, rotateTimer = null, autoPlaying = false;
+
+function setAutoBadge(on){
+  document.querySelectorAll('#tabs .tab').forEach(t=>{
+    t.classList.toggle('autoplay', on);
+  });
+  const banner = document.getElementById('autoBanner');
+  if(banner) banner.style.display = on ? 'flex' : 'none';
+}
+function startAutoPlay(){
+  if(autoPlaying) return;
+  autoPlaying = true;
+  setAutoBadge(true);
+  rotateTimer = setInterval(()=>{
+    const i = VIEW_ORDER.indexOf(currentView);
+    const next = VIEW_ORDER[(i+1) % VIEW_ORDER.length];
+    window.setView(next, true);  // auto=true → idle 타이머 건드리지 않음
+  }, ROTATE_MS);
+}
+function stopAutoPlay(){
+  if(!autoPlaying) return;
+  autoPlaying = false;
+  setAutoBadge(false);
+  clearInterval(rotateTimer); rotateTimer = null;
+}
+// 사용자 조작 감지 → 자동재생 중단 + idle 타이머 재시작
+window.userInteracted = function(){
+  stopAutoPlay();
+  if(idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(startAutoPlay, IDLE_MS);
+};
+// 조작 이벤트 바인딩 (3D 드래그·휠·키·터치)
+['mousedown','wheel','keydown','touchstart'].forEach(ev=>{
+  window.addEventListener(ev, ()=>window.userInteracted(), {passive:true});
+});
+// 최초 idle 타이머 가동
+idleTimer = setTimeout(startAutoPlay, IDLE_MS);
 
 /* ── 하드웨어 시뮬레이션 상태 ──
    RPi5 Duty Cycle: 열당 ~150노드 5분 주기 → ~50% 점유 (분산 효과)
