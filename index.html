@@ -978,23 +978,27 @@ for(let si=0; si<SPAN; si++){
     roofVents.push(hinge);
   }
 
-  /* ── 알루미늄 차광스크린 — 천창 아래, 천장 전체 수평면
-     일사량 多 + 고온 시 Z방향으로 펼쳐짐(전개). 은빛 반투명 알루미늄 ── */
+  /* ── 알루미늄 차광스크린 — 천창 아래, 동별 9.6m(GW) 폭을 양쪽에서 개폐
+     좌/우 2장이 양쪽 벽끝에서 중앙으로 모이며 닫힘(차광 100%=중앙서 만남)
+     일사량 多 + 고온 시 닫힘. 은빛 반투명 알루미늄 ── */
   const SCR_Y = GH - .28;               // 천창 아래
-  const screenGrp = new THREE.Group();
-  // 펼침 기준점: 동 입구쪽(Z=1)에서 출구쪽으로 슬라이드
-  const screen = new THREE.Mesh(
-    new THREE.BoxGeometry(GW-0.6, .02, GL-2),
-    new THREE.MeshLambertMaterial({color:0xc8d0d8, transparent:true, opacity:.55, emissive:0x3a4048, emissiveIntensity:.15})
-  );
-  screen.position.set(0, 0, (GL-2)/2);  // 그룹 원점이 Z=1, 면은 +Z로 뻗음
-  screenGrp.add(screen);
-  screenGrp.position.set(cx, SCR_Y, 1);
-  screenGrp.scale.z = 0.001;            // 초기 접힘
-  facilityLayer.add(screenGrp);
-  // 스크린 레일 (양쪽 고정, 항상 보임)
-  [-(GW-0.6)/2, (GW-0.6)/2].forEach(xo=>{
-    facPipe(new THREE.Vector3(cx+xo, SCR_Y, 1), new THREE.Vector3(cx+xo, SCR_Y, GL-1), .025, 0x5a6068, .6);
+  const SCR_HALF = (GW-0.5)/2;          // 한쪽 스크린이 덮는 최대 폭(반폭)
+  const scrMat = ()=>new THREE.MeshLambertMaterial({color:0xc8d0d8, transparent:true, opacity:.58, emissive:0x3a4048, emissiveIntensity:.15});
+  // 좌 스크린: 왼쪽 벽(cx-GW/2)에 경첩, +X로 펼쳐짐 / 우 스크린: 오른쪽 벽에서 -X로
+  const screenL = new THREE.Mesh(new THREE.BoxGeometry(SCR_HALF, .02, GL-2), scrMat());
+  const screenR = new THREE.Mesh(new THREE.BoxGeometry(SCR_HALF, .02, GL-2), scrMat());
+  // 그룹 원점을 각 벽끝에 두고 X스케일로 중앙을 향해 펼침
+  const screenLG = new THREE.Group(); screenLG.position.set(cx - GW/2 + 0.25, SCR_Y, GL*0.5);
+  const screenRG = new THREE.Group(); screenRG.position.set(cx + GW/2 - 0.25, SCR_Y, GL*0.5);
+  screenL.position.x =  SCR_HALF/2;     // 원점(좌벽)에서 +X로 뻗음
+  screenR.position.x = -SCR_HALF/2;     // 원점(우벽)에서 -X로 뻗음
+  screenLG.add(screenL); screenRG.add(screenR);
+  screenLG.scale.x = 0.001; screenRG.scale.x = 0.001;   // 초기 열림(접힘)
+  facilityLayer.add(screenLG); facilityLayer.add(screenRG);
+  const screenGrp = { L: screenLG, R: screenRG };
+  // 스크린 레일 (양쪽 벽 고정, 항상 보임) — Z방향 주행 레일
+  [-(GW/2-0.25), (GW/2-0.25)].forEach(xo=>{
+    facPipe(new THREE.Vector3(cx+xo, SCR_Y+.03, 1), new THREE.Vector3(cx+xo, SCR_Y+.03, GL-1), .025, 0x5a6068, .6);
   });
 
   /* ── CO₂ 인젝터 — IN쪽 라인에서 분기, 동별 공급 노즐 + 분사 입자 ── */
@@ -3295,8 +3299,12 @@ function simFacility(){
     }
     // 3D 천창 개폐 (경첩 회전, 최대 ~50도)
     u.roofVents.forEach((h,vi)=>{ h.rotation.z = -(u.ventOpen/100) * Math.PI*0.28; });
-    // 3D 차광스크린 전개 (Z방향 슬라이드)
-    if(u.screenGrp) u.screenGrp.scale.z = Math.max(0.001, u.scrOpen/100);
+    // 3D 차광스크린 전개 (양쪽에서 중앙으로 X방향 개폐)
+    if(u.screenGrp){
+      const sx = Math.max(0.001, u.scrOpen/100);
+      u.screenGrp.L.scale.x = sx;
+      u.screenGrp.R.scale.x = sx;
+    }
   });
 }
 
