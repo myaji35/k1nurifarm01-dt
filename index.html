@@ -978,25 +978,32 @@ for(let si=0; si<SPAN; si++){
     roofVents.push(hinge);
   }
 
-  /* ── 알루미늄 차광스크린 — 천창 아래, 동별 9.6m(GW) 폭을 양쪽에서 개폐
-     좌/우 2장이 양쪽 벽끝에서 중앙으로 모이며 닫힘(차광 100%=중앙서 만남)
+  /* ── 알루미늄 차광스크린 — 천창 아래, 동당 4블록(Z방향 4등분) 독립 제어
+     각 블록 = 좌/우 2장 양쪽 개폐 (벽끝→중앙). 블록별 차광율 독립
      일사량 多 + 고온 시 닫힘. 은빛 반투명 알루미늄 ── */
   const SCR_Y = GH - .28;               // 천창 아래
-  const SCR_HALF = (GW-0.5)/2;          // 한쪽 스크린이 덮는 최대 폭(반폭)
+  const SCR_HALF = (GW-0.5)/2;          // 한쪽 스크린 최대 반폭
+  const SCR_BLOCKS = 4;                 // Z방향 4블록
+  const SCR_BLEN = (GL-2)/SCR_BLOCKS;   // 블록당 길이
   const scrMat = ()=>new THREE.MeshLambertMaterial({color:0xc8d0d8, transparent:true, opacity:.58, emissive:0x3a4048, emissiveIntensity:.15});
-  // 좌 스크린: 왼쪽 벽(cx-GW/2)에 경첩, +X로 펼쳐짐 / 우 스크린: 오른쪽 벽에서 -X로
-  const screenL = new THREE.Mesh(new THREE.BoxGeometry(SCR_HALF, .02, GL-2), scrMat());
-  const screenR = new THREE.Mesh(new THREE.BoxGeometry(SCR_HALF, .02, GL-2), scrMat());
-  // 그룹 원점을 각 벽끝에 두고 X스케일로 중앙을 향해 펼침
-  const screenLG = new THREE.Group(); screenLG.position.set(cx - GW/2 + 0.25, SCR_Y, GL*0.5);
-  const screenRG = new THREE.Group(); screenRG.position.set(cx + GW/2 - 0.25, SCR_Y, GL*0.5);
-  screenL.position.x =  SCR_HALF/2;     // 원점(좌벽)에서 +X로 뻗음
-  screenR.position.x = -SCR_HALF/2;     // 원점(우벽)에서 -X로 뻗음
-  screenLG.add(screenL); screenRG.add(screenR);
-  screenLG.scale.x = 0.001; screenRG.scale.x = 0.001;   // 초기 열림(접힘)
-  facilityLayer.add(screenLG); facilityLayer.add(screenRG);
-  const screenGrp = { L: screenLG, R: screenRG };
-  // 스크린 레일 (양쪽 벽 고정, 항상 보임) — Z방향 주행 레일
+  const scrBlocks = [];                 // 블록별 {L,R} 그룹
+  for(let b=0; b<SCR_BLOCKS; b++){
+    const bz = 1 + SCR_BLEN*(b+.5);     // 블록 중심 Z
+    const screenL = new THREE.Mesh(new THREE.BoxGeometry(SCR_HALF, .02, SCR_BLEN-.1), scrMat());
+    const screenR = new THREE.Mesh(new THREE.BoxGeometry(SCR_HALF, .02, SCR_BLEN-.1), scrMat());
+    const LG = new THREE.Group(); LG.position.set(cx - GW/2 + 0.25, SCR_Y, bz);
+    const RG = new THREE.Group(); RG.position.set(cx + GW/2 - 0.25, SCR_Y, bz);
+    screenL.position.x =  SCR_HALF/2;   // 좌벽→+X
+    screenR.position.x = -SCR_HALF/2;   // 우벽→-X
+    LG.add(screenL); RG.add(screenR);
+    LG.scale.x = 0.001; RG.scale.x = 0.001;
+    facilityLayer.add(LG); facilityLayer.add(RG);
+    scrBlocks.push({ L: LG, R: RG });
+    // 블록 경계 구분 레일 (Z방향, 블록 사이 가로대)
+    if(b>0) facPipe(new THREE.Vector3(cx-GW/2+0.25, SCR_Y+.04, 1+SCR_BLEN*b), new THREE.Vector3(cx+GW/2-0.25, SCR_Y+.04, 1+SCR_BLEN*b), .02, 0x6a7078, .5);
+  }
+  const screenGrp = { blocks: scrBlocks };
+  // 스크린 레일 (양쪽 벽 고정, Z방향 주행)
   [-(GW/2-0.25), (GW/2-0.25)].forEach(xo=>{
     facPipe(new THREE.Vector3(cx+xo, SCR_Y+.03, 1), new THREE.Vector3(cx+xo, SCR_Y+.03, GL-1), .025, 0x5a6068, .6);
   });
@@ -1058,7 +1065,8 @@ for(let si=0; si<SPAN; si++){
     thCv, thTex, thSpr, dripDrops,               // 대형 온습도 패널 + 점적 물방울
     roofVents, ventOpen: 30 + Math.random()*40,  // 천창 + 개폐율 %
     co2Jets, co2ppm: 700 + Math.random()*300,    // CO₂ 인젝터 + 농도 ppm
-    screenGrp, scrOpen: 0                         // 알루미늄 차광스크린 + 전개율 %
+    screenGrp,
+    scrL: [0,0,0,0], scrR: [0,0,0,0]              // 좌/우 천창스크린 각 4조각 독립 차광율 %
   });
 }
 
@@ -3280,10 +3288,26 @@ function simFacility(){
     const co2Target = solRatio > 0.15 ? 850 + solRatio*200 : 450 + Math.random()*80;
     u.co2ppm += (co2Target - u.co2ppm) * 0.1;
     // 알루미늄 차광스크린: 일사량 多 + 고온 시 전개
-    const scrTarget = (solRatio > 0.5 && t > 25)
+    // 좌/우 스크린 각각 4조각 독립 제어 (구간별 일사·온도차 대응)
+    const scrBase = (solRatio > 0.5 && t > 25)
       ? Math.min(100, (solRatio-0.5)*120 + (t-25)*15)
       : (solRatio > 0.7 ? (solRatio-0.7)*200 : 0);
-    u.scrOpen += (Math.max(0,Math.min(100,scrTarget)) - u.scrOpen) * 0.08;
+    let scrSum = 0;
+    for(let bi=0; bi<4; bi++){
+      // 좌/우·조각마다 약간의 편차 (조각별 그늘/일사 차이)
+      const tgtL = Math.max(0, Math.min(100, scrBase + (bi-1.5)*7 + (Math.random()-.5)*5));
+      const tgtR = Math.max(0, Math.min(100, scrBase + (bi-1.5)*7 + 4 + (Math.random()-.5)*5));  // 우측 약간 더
+      u.scrL[bi] += (tgtL - u.scrL[bi]) * 0.08;
+      u.scrR[bi] += (tgtR - u.scrR[bi]) * 0.08;
+      // 3D 반영 (조각별 좌/우 X스케일 독립)
+      const blk = u.screenGrp && u.screenGrp.blocks[bi];
+      if(blk){
+        blk.L.scale.x = Math.max(0.001, u.scrL[bi]/100);
+        blk.R.scale.x = Math.max(0.001, u.scrR[bi]/100);
+      }
+      scrSum += u.scrL[bi] + u.scrR[bi];
+    }
+    u.scrOpen = scrSum/8;  // 전체 평균 (패널/로그용)
 
     // 드물게 이벤트
     if(Math.random() < 0.008){
@@ -3299,12 +3323,7 @@ function simFacility(){
     }
     // 3D 천창 개폐 (경첩 회전, 최대 ~50도)
     u.roofVents.forEach((h,vi)=>{ h.rotation.z = -(u.ventOpen/100) * Math.PI*0.28; });
-    // 3D 차광스크린 전개 (양쪽에서 중앙으로 X방향 개폐)
-    if(u.screenGrp){
-      const sx = Math.max(0.001, u.scrOpen/100);
-      u.screenGrp.L.scale.x = sx;
-      u.screenGrp.R.scale.x = sx;
-    }
+    // (차광스크린 3D 반영은 위 scrBlocks 루프에서 블록별 처리)
   });
 }
 
