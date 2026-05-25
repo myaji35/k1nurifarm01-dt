@@ -1842,16 +1842,24 @@ function buildAVN(id, label, color, zHome, zReach){
 // 각 AVN은 X축으로 4개 거점 운용 (1동~5동 사이를 이동하지 않고, 캐리어가 이 거점으로 옴)
 // 단순화: AVN 1대씩, 5동 평균 위치(X=중앙)에 배치하고 Z축으로 컨베이어 ↔ 캐리어 작업공간 왕복
 
-// AMR 풀 (3대) — 통합 운영, IN/OUT 역할 동적 할당
-// home: 횡단 통로 위 분산 배치, X축 자유 이동, 측면 우회로로 IN 컨베이어 접근
-const amrVis = [
-  buildAVN('AMR-01', 'AMR-01', 0xffa040, CROSS_AISLE_Z, GL*.5),
-  buildAVN('AMR-02', 'AMR-02', 0xffa040, CROSS_AISLE_Z, GL*.5),
-  buildAVN('AMR-03', 'AMR-03', 0xffa040, CROSS_AISLE_Z, GL*.5)
-];
+// AMR 풀 (12대) — 캐리어 3대 × (IN-AMR 3 + OUT-AMR 1) 전담 페어링.
+//   IN-AMR(파랑) 자재공급: 왕복 길어(IN컨베이어 z-2.6) 캐리어당 3대 교대 → 캐리어 무정지.
+//   OUT-AMR(주황) 수확출고: 왕복 짧아 캐리어당 1대.
+//   ※ AMR 이동속도 재원 미확정 → 실데이터 시점에 작업효율 맞춰 대수 재조정 예정.
+const AMR_IN_CLR = 0x40a0ff, AMR_OUT_CLR = 0xffa040;
+// 캐리어별: IN 3 + OUT 1
+const _amrDefs = [];
+['C-01','C-02','C-03'].forEach((cid, ci)=>{
+  for(let k=1;k<=3;k++) _amrDefs.push({id:`IN-${ci+1}${k}`, kind:'in', carrier:cid});
+  _amrDefs.push({id:`OUT-${ci+1}`, kind:'out', carrier:cid});
+});
+const amrVis = _amrDefs.map(d =>
+  buildAVN(d.id, d.id, d.kind==='in'?AMR_IN_CLR:AMR_OUT_CLR, CROSS_AISLE_Z, GL*.5)
+);
 
-// AMR 풀 초기 위치 — 횡단 통로 위 X축 분산 배치
-const amrHomeXs = [GW*1, GW*2.5, GW*4];
+// AMR 초기 위치 — 담당 캐리어 통로 근처 분산 (이후 캐리어 추종)
+const _aisleXOf = {'C-01':GW*1+A1C, 'C-02':GW*3+A2C, 'C-03':GW*4+A2C};
+const amrHomeXs = _amrDefs.map((d,i)=> _aisleXOf[d.carrier] + ((i%4)-1.5)*0.7);
 amrVis.forEach((v, i)=>{
   v.grp.position.set(amrHomeXs[i], 0, CROSS_AISLE_Z);
 });
@@ -1865,34 +1873,28 @@ const logisticsObjects = [
   ...chgStrip
 ];
 
-/* AMR 상태머신 (통합 풀)
+/* AMR 상태머신 (캐리어 전담 페어 12대)
    role: null / 'pickup-out' (캐리어→OUT) / 'delivery-in' (IN→캐리어)
-   state: 0 대기 / 1 적재 / 2 이동 / 3 인계 / 4 복귀
-   AMR은 한 사이클에 한 가지 role만 수행하고 home 복귀 시 풀로 반환
+   state: 0 대기(캐리어 추종) / 1 적재 / 2 이동 / 3 인계 / 4 복귀 / 5 충전·정비
+   각 AMR은 homeCarrier·kind 고정. 한 사이클 후 충전 필요 시 state 5.
 */
-const amrPool = [
-  {
-    id:'AMR-01', vis:amrVis[0], role:null, target:null,
-    state:0, stateTimer:0, hasDrum:false, drumColor:0xff8c30,
-    homeX: amrHomeXs[0], homeZ: CROSS_AISLE_Z,
-    x: amrHomeXs[0], z: CROSS_AISLE_Z,
-    waypoint:null  // 현재 이동 단계 라벨 ('to-side','on-side','to-cross','on-cross','to-aisle','to-home')
-  },
-  {
-    id:'AMR-02', vis:amrVis[1], role:null, target:null,
-    state:0, stateTimer:0, hasDrum:false, drumColor:0xff8c30,
-    homeX: amrHomeXs[1], homeZ: CROSS_AISLE_Z,
-    x: amrHomeXs[1], z: CROSS_AISLE_Z,
+const amrPool = _amrDefs.map((d,i)=>{
+  // 같은 캐리어·kind 내 순번(0,1,2…) → 추종 시 겹침 방지용 슬롯
+  const slot = _amrDefs.slice(0,i).filter(x=>x.carrier===d.carrier && x.kind===d.kind).length;
+  return {
+    id:d.id, vis:amrVis[i], role:null, target:null,
+    kind:d.kind,                 // 'in' | 'out' (고정 역할)
+    homeCarrier:d.carrier,       // 전담 캐리어 id (따라다님)
+    followSlot: slot,            // 캐리어 내 같은 kind 순번 (추종 분산)
+    state:0, stateTimer:0, hasDrum:false,
+    drumColor: d.kind==='in' ? 0x4080c0 : 0xff8c30,
+    battery: 60 + Math.random()*40,   // AMR 배터리(충전·정비 반영)
+    cyclesSinceService: 0,            // 정비 주기 카운트
+    homeX: amrHomeXs[i], homeZ: CROSS_AISLE_Z,
+    x: amrHomeXs[i], z: CROSS_AISLE_Z,
     waypoint:null
-  },
-  {
-    id:'AMR-03', vis:amrVis[2], role:null, target:null,
-    state:0, stateTimer:0, hasDrum:false, drumColor:0xff8c30,
-    homeX: amrHomeXs[2], homeZ: CROSS_AISLE_Z,
-    x: amrHomeXs[2], z: CROSS_AISLE_Z,
-    waypoint:null
-  }
-];
+  };
+});
 
 // 작업 큐 — 캐리어가 요청 push, AMR이 한가하면 pop
 // req: { kind:'pickup-out'|'delivery-in', carrier, requestedAt }
@@ -2115,25 +2117,35 @@ function loop(ts){
      role: 'pickup-out' (캐리어→OUT) / 'delivery-in' (IN→캐리어)
      ──────────────────────────────────────────────────── */
 
-  // 디스패치: 우선순위(임박도) 정렬 후 한가한 AMR에게 할당
+  // 디스패치: 작업을 해당 캐리어의 전담 AMR(kind 일치)에게만 할당.
+  //   pickup-out → 그 캐리어의 OUT-AMR, delivery-in → IN-AMR. (전담 페어링)
   if(workQueue.length > 0){
-    workQueue.sort((a,b)=> (b.priority||0) - (a.priority||0));  // 높은 priority 먼저
-    const idleAmr = amrPool.find(a=>a.state===0 && !a.role && !a.hasDrum);
-    if(idleAmr){
-      const req = workQueue.shift();
-      idleAmr.role = req.kind;
-      idleAmr.target = req.carrier;
+    workQueue.sort((a,b)=> (b.priority||0) - (a.priority||0));
+    for(let qi=workQueue.length-1; qi>=0; qi--){
+      const req = workQueue[qi];
+      const wantKind = req.kind==='delivery-in' ? 'in' : 'out';
+      const amr = amrPool.find(a => a.homeCarrier===req.carrier.id && a.kind===wantKind
+                                    && a.state===0 && !a.role && !a.hasDrum);
+      if(!amr) continue;            // 전담 AMR이 아직 바쁘면 대기 (다음 tick)
+      workQueue.splice(qi,1);
+      amr.role = req.kind;
+      amr.target = req.carrier;
       if(req.kind === 'delivery-in'){
-        // IN 자재 공급: 먼저 IN 컨베이어로 가서 적재 후 캐리어로
-        idleAmr.state = 1;  // 적재 단계 (IN 컨베이어로 측면 우회로 통해 이동)
-        idleAmr.stateTimer = 0;
-        idleAmr.drumColor = 0x4080c0;  // IN 누리셀 색
-      }else if(req.kind === 'pickup-out'){
-        // 캐리어로부터 수확 누리셀 받기: 빈 상태로 캐리어로 이동
-        idleAmr.state = 2;
-        idleAmr.stateTimer = 0;
-        idleAmr.drumColor = 0xff8c30;
+        amr.state = 1; amr.stateTimer = 0; amr.drumColor = 0x4080c0;  // IN 컨베이어 적재부터
+      }else{
+        amr.state = 2; amr.stateTimer = 0; amr.drumColor = 0xff8c30;  // 캐리어로 (빈 상태)
       }
+    }
+  }
+
+  // 사이클 완료 → 배터리/정비 판정. 필요 시 충전·정비(state 5), 아니면 추종 대기(state 0).
+  function endAmrCycle(a){
+    a.role = null; a.target = null; a.stateTimer = 0;
+    a.cyclesSinceService++;
+    if(a.battery < 25 || a.cyclesSinceService >= 8){
+      a.state = 5;  // 충전·정비
+    }else{
+      a.state = 0;  // 추종 대기
     }
   }
 
@@ -2141,13 +2153,31 @@ function loop(ts){
     a.stateTimer += dt;
     const v = a.vis;
 
-    if(a.state===0){ // 대기 (home, 횡단 통로 위)
-      // home으로 부드럽게 수렴
-      a.x += (a.homeX - a.x) * Math.min(1, dt*2);
-      a.z += (a.homeZ - a.z) * Math.min(1, dt*3);
-      v.led.material.color.setHex(0x40ff80);
-      v.led.material.emissive.setHex(0x40ff80);
-      v.led.material.emissiveIntensity = .5;
+    if(a.state===0){ // 대기 — 담당 캐리어를 따라다님 (전담 페어링)
+      const hc = carriers.find(c=>c.id===a.homeCarrier);
+      // 담당 캐리어가 가동 중(주행~작업)이면 그 통로 옆에서 동행, 충전/대기면 home으로
+      const carrierWorking = hc && hc.state!==4 && hc.state!==3;
+      let followX, followZ;
+      if(carrierWorking){
+        // 캐리어 전방(Z+, 조정실 카메라 시야)에 대기열로 줄지어 동행 (다리 사이 통과 동선).
+        //   IN-AMR: 전방에 슬롯별로 줄서기(자재 공급 대기열), 통로 좌측에 약간 치우침
+        //   OUT-AMR: 전방 우측에 대기(수확 받기)
+        if(a.kind==='in'){
+          followX = hc.x - 0.55;                       // 통로 좌측
+          followZ = hc.z + 1.6 + a.followSlot*1.5;     // 전방으로 줄지어(슬롯 간격 1.5m)
+        }else{
+          followX = hc.x + 0.55;                       // 통로 우측
+          followZ = hc.z + 1.6 + a.followSlot*1.5;
+        }
+      }else{
+        followX = a.homeX; followZ = a.homeZ;               // 대기소 복귀
+      }
+      a.x += (followX - a.x) * Math.min(1, dt*2.5);
+      a.z += (followZ - a.z) * Math.min(1, dt*2.5);
+      const idleClr = a.kind==='in' ? 0x40a0ff : 0xffa040;
+      v.led.material.color.setHex(idleClr);
+      v.led.material.emissive.setHex(idleClr);
+      v.led.material.emissiveIntensity = .45;
     }
     else if(a.state===1){ // IN 컨베이어로 측면 우회로 통해 이동 + 적재
       // 경로: 현재 위치(횡단 통로) → SIDE_AISLE_X로 X 이동 → IN 컨베이어 옆 Z로 이동 → 적재
@@ -2269,8 +2299,7 @@ function loop(ts){
             a.hasDrum = false;
             v.heldDrum.material.opacity = 0;
             OUT_CONVEYOR.paused = false;
-            a.role = null; a.target = null;
-            a.state = 0; a.stateTimer = 0;
+            endAmrCycle(a);
           }
           stepX = a.x; stepZ = a.z;
         }
@@ -2281,8 +2310,7 @@ function loop(ts){
         }else{
           stepX = a.homeX; stepZ = a.homeZ;
           if(Math.abs(a.x - a.homeX) < .15 && Math.abs(a.z - a.homeZ) < .15){
-            a.role = null; a.target = null;
-            a.state = 0; a.stateTimer = 0;
+            endAmrCycle(a);
           }
         }
       }
@@ -2294,6 +2322,23 @@ function loop(ts){
       v.led.material.emissive.setHex(a.hasDrum ? 0xff8c30 : 0x40c0ff);
       v.led.material.emissiveIntensity = .4;
     }
+    else if(a.state===5){ // 충전·정비 (담당 캐리어 통로 끝 정비소에서 충전)
+      // 담당 캐리어 통로의 횡단통로 위로 이동해 정비
+      a.x += (a.homeX - a.x) * Math.min(1, dt*2);
+      a.z += (CROSS_AISLE_Z - a.z) * Math.min(1, dt*2.5);
+      a.battery = Math.min(100, a.battery + 4.0*dt);   // 충전
+      // 충전 완료(95%+) + 정비 시간(>4초) → 정비 카운트 리셋 후 복귀
+      if(a.battery >= 95 && a.stateTimer > 4){
+        a.cyclesSinceService = 0;
+        a.state = 0; a.stateTimer = 0;
+      }
+      const pulse = (Math.sin(t0*.01)+1)*.5;
+      v.led.material.color.setHex(0x40ff80);
+      v.led.material.emissive.setHex(0x40ff80);
+      v.led.material.emissiveIntensity = .25 + pulse*.5;
+    }
+    // AMR 배터리 소모 (가동 상태일 때)
+    if(a.state>=1 && a.state<=4) a.battery = Math.max(0, a.battery - .25*dt);
     // 위치 반영
     v.grp.position.set(a.x, 0, a.z);
   });
@@ -2873,10 +2918,13 @@ function buildCarrierPanel(){
       const on = c.zoneSpan.includes(i);
       return `<div class="zoneseg${on?' on':''}"></div>`;
     }).join('');
-    // 운영효율 메트릭
-    const avgCycle = c.cycleTimes.length>0
-      ? (c.cycleTimes.reduce((a,b)=>a+b,0) / c.cycleTimes.length).toFixed(1)
-      : '—';
+    // 운영효율 메트릭 — 사이클 타임 6분(360s) 이내 목표
+    const avgSec = c.cycleTimes.length>0
+      ? (c.cycleTimes.reduce((a,b)=>a+b,0) / c.cycleTimes.length)
+      : null;
+    const cycMin = avgSec!=null ? (avgSec/60).toFixed(1) : '—';
+    const cycOk = avgSec!=null && avgSec <= 360;   // 6분 이내
+    const cycClr = avgSec==null ? '#9FE1CB' : (cycOk ? '#5DCAA5' : '#E24B4A');
     const util = c.totalMs > 1000
       ? Math.round(c.activeMs / c.totalMs * 100)
       : 0;
@@ -2885,7 +2933,7 @@ function buildCarrierPanel(){
     <div class="ch"><span class="cn">${c.id}</span><span class="cstate ${stKey}">${stTxt}</span></div>
     <div class="crow"><span class="ck">담당</span><span class="cv">${c.zone}</span></div>
     <div class="crow"><span class="ck">위치</span><span class="cv" id="cp-${c.id}">${spanIdx+1}동·${aisleStr}</span></div>
-    <div class="crow"><span class="ck">사이클</span><span class="cv" id="cy-${c.id}">${c.cycles}회 · 평균 ${avgCycle}s</span></div>
+    <div class="crow"><span class="ck">사이클(목표 6분)</span><span class="cv" id="cy-${c.id}" style="color:${cycClr}">${c.cycles}회 · ${cycMin}분</span></div>
     <div class="crow"><span class="ck">가동률</span><span class="cv" id="cu-${c.id}">${util}%</span></div>
     <div class="crow"><span class="ck">배터리</span><span class="cv" id="cb-${c.id}">${c.battery.toFixed(0)}%</span></div>
     <div class="bbar"><div class="bfill${c.battery<25?' low':''}" id="bf-${c.id}" style="width:${c.battery}%"></div></div>
@@ -3020,10 +3068,10 @@ function tick(){
     // 사이클 메트릭
     const cy=document.getElementById('cy-'+c.id);
     if(cy){
-      const avgCycle = c.cycleTimes.length>0
-        ? (c.cycleTimes.reduce((a,b)=>a+b,0) / c.cycleTimes.length).toFixed(1)
-        : '—';
-      cy.textContent = `${c.cycles}회 · 평균 ${avgCycle}s`;
+      const avgSec = c.cycleTimes.length>0
+        ? (c.cycleTimes.reduce((a,b)=>a+b,0) / c.cycleTimes.length) : null;
+      cy.textContent = `${c.cycles}회 · ${avgSec!=null?(avgSec/60).toFixed(1):'—'}분`;
+      cy.style.color = avgSec==null ? '#9FE1CB' : (avgSec<=360 ? '#5DCAA5' : '#E24B4A');  // 6분 기준
     }
     const cu=document.getElementById('cu-'+c.id);
     if(cu){
@@ -3053,6 +3101,10 @@ function tick(){
   /* AMR 풀 패널 갱신 */
   const qLen = document.getElementById('queue-len');
   if(qLen) qLen.textContent = workQueue.length;
+  // KPI: AMR 가동수 (충전·정비 state 5 제외) / 총 12대
+  const amrActive = amrPool.filter(a=>a.state!==5).length;
+  const amrKpi = document.getElementById('kt-amr');
+  if(amrKpi) amrKpi.textContent = `${amrActive}/${amrPool.length}`;
   amrPool.forEach(a=>{
     const card=document.getElementById('ac-'+a.id);
     if(!card)return;
