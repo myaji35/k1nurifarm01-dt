@@ -60,6 +60,27 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 .bfill.low{background:linear-gradient(90deg,#EF9F27,#E24B4A)}
 #ctr{flex:1;position:relative;overflow:hidden;background:#020608}
 #ctr canvas{display:block;width:100%!important;height:100%!important}
+/* 조정실(cockpit) N분할 HUD 오버레이 — 캔버스 위에 절대배치 */
+#cockpitHud{position:absolute;inset:0;display:none;pointer-events:none;z-index:5}
+#cockpitHud.on{display:flex}
+.cpCell{flex:1;position:relative;border-left:1px solid rgba(217,176,32,.30);box-sizing:border-box}
+.cpCell:first-child{border-left:none}
+.cpHead{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;
+  padding:7px 11px;background:linear-gradient(180deg,rgba(8,14,22,.86),rgba(8,14,22,0));font-size:12px}
+.cpId{font-weight:700;color:#d9b020;font-family:'Courier New',monospace;letter-spacing:.5px}
+.cpZone{color:#7a9a8a;font-size:10px}
+.cpStat{margin-left:auto;font-size:10px;padding:2px 8px;border-radius:3px;font-weight:600}
+.cpStat.run{background:rgba(46,196,182,.18);color:#7ae0c8}
+.cpStat.idle{background:rgba(122,154,138,.16);color:#9ab0a4}
+.cpStat.chg{background:rgba(42,127,212,.2);color:#6ab0e8}
+.cpFoot{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;
+  padding:6px 11px;background:linear-gradient(0deg,rgba(8,14,22,.82),rgba(8,14,22,0));
+  font-size:10px;color:#8fb0a4;font-family:'Courier New',monospace}
+.cpRet{position:absolute;top:50%;left:50%;width:22px;height:22px;transform:translate(-50%,-50%);
+  border:1px solid rgba(217,176,32,.4);border-radius:50%;opacity:.5}
+.cpRet::before,.cpRet::after{content:'';position:absolute;background:rgba(217,176,32,.5)}
+.cpRet::before{top:50%;left:-7px;right:-7px;height:1px}
+.cpRet::after{left:50%;top:-7px;bottom:-7px;width:1px}
 #rp{width:242px;flex-shrink:0;background:rgba(14,24,38,.95);border-left:1px solid rgba(46,196,182,.2);padding:8px;overflow-y:auto}
 .stbl{width:100%;font-size:11px;border-collapse:collapse;margin-bottom:8px}
 .stbl th{color:#5a8a7a;font-weight:500;padding:2px 3px;font-size:10px;text-align:left}
@@ -100,6 +121,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   <button class="tab active" data-view="cell"     onclick="setView('cell')">🌱 누리셀</button>
   <button class="tab"        data-view="hw"       onclick="setView('hw')">🖧 HW</button>
   <button class="tab"        data-view="facility" onclick="setView('facility')">🔧 관수 · 냉난방 설비</button>
+  <button class="tab"        data-view="cockpit"  onclick="setView('cockpit')">🎮 조정실</button>
   <div id="autoBanner"><span class="dot"></span>AUTO 순환 재생 중 · 조작 시 정지</div>
 </div>
 <div id="top">
@@ -176,7 +198,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
       <div id="hvacRows"></div>
     </div>
   </div>
-  <div id="ctr"></div>
+  <div id="ctr"><div id="cockpitHud"></div></div>
   <div id="rp">
     <div class="ptit env-only">환경 센서 (실시간)</div>
     <table class="stbl env-only"><thead><tr><th>동</th><th>기온</th><th>습도</th><th>EC</th><th>pH</th></tr></thead><tbody id="stb"></tbody></table>
@@ -549,10 +571,11 @@ const hwLayer = new THREE.Group();   // 하드웨어 객체 전체 (토글 대�
 scene.add(hwLayer);
 
 /* 뷰 모드/시뮬 상태 — loop()·tick()보다 먼저 선언 (TDZ 회피)
-   currentView: 'cell'(누리셀) | 'hw'(하드웨어) | 'facility'(관수·냉난방 설비) */
+   currentView: 'cell' | 'hw' | 'facility' | 'cockpit'(캐리어 운전석 1인칭 N분할) */
 let currentView = 'cell';
 let hwView = false;       // (currentView==='hw') 단축 플래그 — 기존 코드 호환
 let facilityView = false; // (currentView==='facility')
+let cockpitView = false;  // (currentView==='cockpit') 캐리어 운전석 1인칭 다중 뷰
 let hwTick = 0;
 let otaCampaign = null;   // 진행 중 OTA 캠페인 { version, startedAt }
 const hwLogMsgs = [];
@@ -716,9 +739,9 @@ rpiGateways.forEach(gw=>{
 });
 
 /* ── 무선(LoRa) 링크 표시: ESP32 → 소속 RPi5 게이트웨이 ──
-   상시 실선은 시각 노이즈 → 점선(LineDashed)로 은은하게, 펄스는 별도 */
+   대표님 요구: 과하게 표시해서라도 통신 시각화. 밝은 시안 점선 + 굵은 송신 펄스 */
 const loraLinks = [];
-const loraLinkMat = new THREE.LineDashedMaterial({color:0x2a6a8a, transparent:true, opacity:.35, dashSize:.18, gapSize:.18});
+const loraLinkMat = new THREE.LineDashedMaterial({color:0x5ad8ff, transparent:true, opacity:.7, dashSize:.22, gapSize:.16});
 esp32Nodes.forEach(node=>{
   const gw = rpiGateways.find(g=>g.id===node.gwId);
   if(!gw) return;
@@ -1895,6 +1918,66 @@ function uc(){
   cam.lookAt(tgt);
 }
 uc();
+
+/* ══════════════════════════════════════════════════════
+   조정실(cockpit) — 캐리어 운전석 1인칭 다중 뷰
+   캐리어 수만큼 화면을 세로 N분할, 각 칸에 해당 캐리어 전용 카메라.
+   카메라: 캐빈쪽(중앙 X+0.9m)·높이 2.5m → 중앙 상단 로봇암(armRootY≈4.68m)을 마주봄.
+   ══════════════════════════════════════════════════════ */
+// 측정값: J1(어깨) y4.68 → J3(팔꿈치) y3.2 → J6(손목) y2.79, 팔은 중앙에서 X+ 1.06 치우침.
+// 운전석=캐빈(X+ 바깥)에 앉아 눈앞 로봇팔 작업영역(y2.6~3.3)을 마주봄.
+const COCKPIT_EYE_Y = 2.3;          // 운전석 시점 높이 (m)
+const COCKPIT_EYE_DX = 2.1;         // 캐빈(X+ 바깥)에서 들여다봄 → 기둥에 안 막힘
+const COCKPIT_LOOK_DX = 0.4;        // 시선 타깃 X (로봇팔 본체 쪽)
+const COCKPIT_LOOK_Y = 2.85;        // 시선 타깃 높이 (팔꿈치~손목 작업영역 중심)
+const cockpitCams = carriers.map(()=>{
+  const c = new THREE.PerspectiveCamera(62, 1, .05, 200);
+  return c;
+});
+// 각 분할 칸의 HUD DOM 노드 캐시 { id, zone, stat, foot }
+let cockpitHudCells = [];
+
+// HUD DOM을 캐리어 수에 맞춰 1회 구축
+function buildCockpitHud(){
+  const hud = document.getElementById('cockpitHud');
+  hud.innerHTML = carriers.map((c,i)=>`
+    <div class="cpCell" data-i="${i}">
+      <div class="cpHead">
+        <span class="cpId">${c.id}</span>
+        <span class="cpZone">${c.zone}</span>
+        <span class="cpStat" data-stat>—</span>
+      </div>
+      <div class="cpRet"></div>
+      <div class="cpFoot"><span data-pos>—</span><span data-bat>—</span></div>
+    </div>`).join('');
+  cockpitHudCells = carriers.map((c,i)=>{
+    const cell = hud.querySelector(`.cpCell[data-i="${i}"]`);
+    return { stat: cell.querySelector('[data-stat]'), pos: cell.querySelector('[data-pos]'), bat: cell.querySelector('[data-bat]') };
+  });
+}
+
+// 상태(state)→ HUD 클래스/라벨
+const COCKPIT_STAT_CLS = ['run','run','run','idle','chg','idle','idle','run'];
+// 매 프레임: 운전석 카메라를 캐리어 위치에 동기화 + HUD 텍스트 갱신
+function syncCockpit(){
+  const w = ctr.clientWidth, h = ctr.clientHeight;
+  const n = carriers.length;
+  const cellW = w / n;
+  carriers.forEach((c,i)=>{
+    const cam = cockpitCams[i];
+    cam.aspect = cellW / h; cam.updateProjectionMatrix();
+    // 캐리어 grp 위치(c.x, 0, c.z) 기준 운전석 시점
+    cam.position.set(c.x + COCKPIT_EYE_DX, COCKPIT_EYE_Y, c.z);
+    cam.lookAt(c.x + COCKPIT_LOOK_DX, COCKPIT_LOOK_Y, c.z);
+    // HUD
+    const hud = cockpitHudCells[i]; if(!hud) return;
+    const st = c.state|0;
+    hud.stat.textContent = C_STATE[st] || '—';
+    hud.stat.className = 'cpStat ' + (COCKPIT_STAT_CLS[st] || 'idle');
+    hud.pos.textContent = `X ${c.x.toFixed(1)}  Z ${c.z.toFixed(1)}`;
+    hud.bat.textContent = `BAT ${Math.round(c.battery)}%`;
+  });
+}
 ren.domElement.addEventListener('mousedown',e=>{
   drag=true;lx=e.clientX;ly=e.clientY;spin=false;
   // 클로즈업 중이 아닐 때만 9초 후 자동 회전 재개
@@ -2658,7 +2741,24 @@ function loop(ts){
     });
   }
 
-  ren.render(scene,cam);
+  if(cockpitView){
+    // 조정실: 캐리어 수만큼 세로 N분할, 각 칸에 운전석 카메라로 같은 scene 렌더
+    syncCockpit();
+    const w = ctr.clientWidth, h = ctr.clientHeight, n = carriers.length;
+    const cellW = w / n;
+    ren.setScissorTest(true);
+    // WebGL 좌표계: 좌하단 원점 → x만 분할, y는 전체
+    carriers.forEach((c,i)=>{
+      const x = Math.floor(i*cellW), cw = Math.floor((i+1)*cellW) - x;
+      ren.setViewport(x, 0, cw, h);
+      ren.setScissor(x, 0, cw, h);
+      ren.render(scene, cockpitCams[i]);
+    });
+    ren.setScissorTest(false);
+    ren.setViewport(0, 0, w, h);   // 다른 뷰 복귀 대비 전체 뷰포트 원복
+  }else{
+    ren.render(scene,cam);
+  }
 }
 loop(0);
 
@@ -3061,14 +3161,17 @@ window.setView = function(mode, auto){
   currentView = mode;
   hwView       = (mode === 'hw');
   facilityView = (mode === 'facility');
+  cockpitView  = (mode === 'cockpit');
   const isCell = (mode === 'cell');
+  // 조정실 뷰는 캐리어·로봇팔·누리셀을 봐야 하므로 누리셀+물류 표시
+  const showFarm = isCell || cockpitView;
 
-  // 누리셀·LED — cell에서만 표시
-  inst.visible    = isCell;
-  bore.visible    = isCell;
-  ledInst.visible = isCell;
-  // 물류 객체(캐리어·AMR·충전소) — cell에서만 표시
-  logisticsObjects.forEach(o=>{ if(o) o.visible = isCell; });
+  // 누리셀·LED — cell/cockpit에서 표시
+  inst.visible    = showFarm;
+  bore.visible    = showFarm;
+  ledInst.visible = showFarm;
+  // 물류 객체(캐리어·AMR·충전소) — cell/cockpit에서 표시
+  logisticsObjects.forEach(o=>{ if(o) o.visible = showFarm; });
   // 하드웨어 레이어 — hw에서만
   hwLayer.visible = hwView;
   // 설비 레이어 — facility에서만 (아직 미생성 시 안전)
@@ -3082,13 +3185,13 @@ window.setView = function(mode, auto){
     });
   }
 
-  // 카메라 프리셋
+  // 카메라 프리셋 (cockpit은 전용 카메라 사용 → 메인 cam 프리셋 불필요)
   spin = false; window._focusedCarrierId = null;
   if(hwView){
     tgt.set(GW*SPAN/2 - 9, 3.2, GL/2);  th = .74; ph = .64; rad = 112;
   }else if(facilityView){
     tgt.set(GW*SPAN/2 - 6, 2.8, GL/2);  th = .58; ph = .68; rad = 104;
-  }else{
+  }else if(!cockpitView){
     tgt.set(GW*SPAN/2, 2.5, GL/2);      th = .48; ph = .88; rad = 92; spin = true;
   }
   uc();
@@ -3108,6 +3211,13 @@ window.setView = function(mode, auto){
 
   if(hwView) buildHwPanel();
   if(facilityView && typeof buildFacPanel === 'function') buildFacPanel();
+
+  // 조정실 HUD 토글 (캔버스 위 N분할 오버레이)
+  const hud = document.getElementById('cockpitHud');
+  if(hud){
+    if(cockpitView){ buildCockpitHud(); hud.classList.add('on'); }
+    else hud.classList.remove('on');
+  }
 };
 // 기존 호출 호환
 window.toggleView = function(){ window.setView(currentView==='cell' ? 'hw' : 'cell'); };
