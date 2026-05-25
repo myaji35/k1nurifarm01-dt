@@ -6,7 +6,9 @@
 <title>k1NuriFarm01 DT Monitering</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+html{width:100%;height:100%}
+/* position:fixed+inset:0 → 100vh의 줌·DPR·스크롤바 의존성 제거, 실제 뷰포트를 정확히 채움 (우측·하단 공백 방지) */
+body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',sans-serif;overflow:hidden;position:fixed;inset:0;width:100%;height:100%;display:flex;flex-direction:column}
 #top{height:50px;background:rgba(16,28,42,.97);border-bottom:1px solid rgba(46,196,182,.35);display:flex;align-items:center;padding:0 14px;gap:11px;flex-shrink:0;z-index:20}
 #logo{font-size:13px;font-weight:600;color:#b8f0dc;letter-spacing:.05em;white-space:nowrap;line-height:1.45}
 #logo small{color:#5a9a86;font-size:10px;font-weight:400;display:block;letter-spacing:.09em}
@@ -131,6 +133,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   <div class="kpi"><div class="kv r" id="kt-rdy">0</div><div class="kl">수확 임박</div></div>
   <div class="kpi"><div class="kv" id="kt-hv">109</div><div class="kl">오늘 수확</div></div>
   <div class="kpi"><div class="kv y" id="kt-cr">2/3</div><div class="kl">캐리어 운용</div></div>
+  <div class="kpi"><div class="kv" id="kt-tph">—</div><div class="kl">처리/h (200기/20h)</div></div>
   <div class="kpi"><div class="kv" id="kt-amr">2</div><div class="kl">AMR 셔틀</div></div>
   <div class="kpi"><div class="kv" id="kt-led">— kW</div><div class="kl">LED 광원</div></div>
   <div class="kpi"><div class="kv w" id="kt-sl">—%</div><div class="kl">태양광</div></div>
@@ -207,10 +210,13 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
     <div class="ptit env-only">에너지 현황</div>
     <div class="er env-only"><span class="ek">태양광 발전</span><span class="ev" id="e-sg">—</span></div>
     <div class="gb env-only"><div class="gf sf" id="e-sb" style="width:65%"></div></div>
-    <div class="er env-only"><span class="ek">전체 부하</span><span class="ev">456 kW</span></div>
-    <div class="gb env-only"><div class="gf lf" style="width:82%"></div></div>
+    <div class="er env-only"><span class="ek">전체 부하</span><span class="ev" id="e-ld">—</span></div>
+    <div class="gb env-only"><div class="gf lf" id="e-lb" style="width:82%"></div></div>
     <div class="er env-only"><span class="ek">ESS 충전량</span><span class="ev" id="e-es">—</span></div>
-    <div class="er env-only"><span class="ek">잉여/부족</span><span class="ev" id="e-df">—</span></div>
+    <div class="gb env-only"><div class="gf" id="e-eb" style="width:78%;background:#2EC4B6"></div></div>
+    <div class="er env-only"><span class="ek">ESS 충·방전</span><span class="ev" id="e-fl">—</span></div>
+    <div class="er env-only"><span class="ek">예비전력(가용)</span><span class="ev" id="e-rs">—</span></div>
+    <div class="er env-only"><span class="ek">계통 수급</span><span class="ev" id="e-df">—</span></div>
     <div class="ptit env-only" style="margin-top:8px">발육 단계 분포</div>
     <div id="stageDist" class="env-only" style="margin-bottom:8px"></div>
     <div class="ptit env-only" style="margin-top:6px">수확 임박 Top 5 (동·랙·열)</div>
@@ -493,9 +499,21 @@ function stageFromDay(d){
 // 누리셀 발육 데이터
 const dayOld   = new Float32Array(NDRUM);  // 생장 일수 (실수, 시간 단위 보간)
 const dstage   = new Uint8Array(NDRUM);    // 현재 발육 단계 (0~3)
-// 초기 분포: 각 단계가 골고루 섞이도록 (사이클 안정 상태 가정)
+// 수확시점 고려 staggered 배치 (대표님 통찰: 처음부터 예상 수확시점 분산 식재):
+//   각 누리셀의 생장일을 황금비 저불일치 수열로 위상 부여 → 30일 사이클이
+//   시간·공간 모두 균등 분산. 매 시뮬 구간 전체의 ~1/30만 수확단계 도달 →
+//   특정 시점·특정 동에 수확이 몰리지 않음(캐리어 부하 평준화).
+/* ── ESS(에너지저장장치) 운영 상태 ──
+   용량 3,650 kWh. SOC(충전상태)를 tick마다 충방전으로 누적 갱신.
+   잉여전력(태양광>부하) 시 충전, 부족 시 방전으로 예비전력 공급. */
+const ESS_CAP_KWH = 3650;        // ESS 총 용량
+const ESS_SOC_MIN = 0.15, ESS_SOC_MAX = 1.0;  // 과방전 방지 하한 15%
+let essSOC = 0.78;               // 초기 충전상태 78%
+const PHI_INV = 0.61803398875;  // 황금비 켤레 (저불일치 → 균등 분산)
 for(let i=0;i<NDRUM;i++){
-  dayOld[i] = Math.random() * HARVEST_DAY;
+  // i*φ⁻¹ 소수부 → [0,1) 균등 분포, 인접 i끼리 위상이 크게 벌어져 공간적으로도 분산
+  const phase = (i * PHI_INV) % 1;
+  dayOld[i] = phase * HARVEST_DAY;
   dstage[i] = stageFromDay(dayOld[i]);
 }
 // 기존 dstat 잔존 — 안전상 유지 (외부 참조 가능)
@@ -1968,9 +1986,18 @@ function syncCockpit(){
   carriers.forEach((c,i)=>{
     const cam = cockpitCams[i];
     cam.aspect = cellW / h; cam.updateProjectionMatrix();
-    // 통로 중앙(c.x, c.z)에서 약간 뒤 → Z+ 주행 정면을 봄. 좌우에 양쪽 랙.
+    // 상하 포커스 이동: 작업 중(픽업1/하역2/적재7)이면 시선 Y가 작업 단(tier) 높이를
+    // 따라 위아래로 이동 → 누리셀 인입출에 집중. 주행 중엔 전방 기본 높이로 복귀.
+    const working = (c.state===1 || c.state===2 || c.state===7);
+    const tierY = (c.targetTierY != null) ? c.targetTierY : COCKPIT_LOOK_Y;
+    const lookYTarget = working ? tierY : COCKPIT_LOOK_Y;
+    if(c._cockLookY == null) c._cockLookY = COCKPIT_LOOK_Y;
+    c._cockLookY += (lookYTarget - c._cockLookY) * 0.06;   // 부드러운 상하 추적
+    // 작업 중엔 가까운 단(짧은 Z 시선)으로, 주행 중엔 멀리 통로 정면
+    const lookDZ = working ? 3.5 : COCKPIT_LOOK_DZ;
+    // 통로 중앙(c.x, c.z)에서 약간 뒤 → Z+ 정면. 좌우에 양쪽 랙.
     cam.position.set(c.x, COCKPIT_EYE_Y, c.z + COCKPIT_EYE_DZ);
-    cam.lookAt(c.x, COCKPIT_LOOK_Y, c.z + COCKPIT_LOOK_DZ);
+    cam.lookAt(c.x, c._cockLookY, c.z + lookDZ);
     // HUD
     const hud = cockpitHudCells[i]; if(!hud) return;
     const st = c.state|0;
@@ -1998,13 +2025,42 @@ ren.domElement.addEventListener('wheel',e=>{rad=Math.max(18,Math.min(170,rad+e.d
    하우스 간 이동도 같은 통로의 X좌표를 유지하며 Z방향으로만 이동
    (실제로는 동 간 X 이동도 필요하지만, 시각적으로는 통로 중심선만 따라감)
 */
+// 누리셀 인덱스 → 동/통로/Z 역변환 (idx = ((si*4+ri)*4+ti)*DZ_N+di)
+const _PER_TIER = DZ_N, _PER_RACK = DZ_N*TY.length, _PER_SPAN = DZ_N*TY.length*RACKXC.length;
+function cellSpan(i){ return Math.floor(i/_PER_SPAN); }
+function cellAisle(i){ const ri = Math.floor(i/_PER_RACK) % RACKXC.length; return ri<2?0:1; }  // R1·R2→A1C, R3·R4→A2C
+function cellZ(i){ return DZ[i % DZ_N]; }
+function cellTierY(i){ return TY[Math.floor(i/_PER_TIER) % TY.length]; }  // 단(tier) 높이
+
+// 수확임박 우선 타깃팅: 담당 동(zoneSpan) 내 수확단계(dstage===3) 셀 중
+// 가장 임박(dayOld 큰)한 위치로 향함. 없으면 가장 익은 셀로. (랜덤 왕복 제거)
 function pickNewTarget(c){
-  if(c.id === 'C-03') return; // 예비 캐리어는 이동 금지
-  const spanIdx = c.zoneSpan[Math.floor(rng(0, c.zoneSpan.length))];
-  // 통로는 캐리어가 가진 기본 통로를 유지 (자기 담당 통로 고수)
-  const aisleX = c.aisle===0 ? A1C : A2C;
-  c.targetX = spanIdx*GW + aisleX;
-  c.targetZ = rng(1.5, GL-1.5);
+  let best = -1, bestDay = -1;
+  const zone = c.zoneSpan;
+  for(let i=0;i<NDRUM;i++){
+    if(dstage[i] !== 3) continue;               // 수확단계만
+    if(zone.indexOf(cellSpan(i)) < 0) continue;  // 담당 동만
+    if(dayOld[i] > bestDay){ bestDay = dayOld[i]; best = i; }
+  }
+  if(best < 0){
+    // 담당 동에 수확단계 없음 → 가장 익은 셀(임박 예정)로 선제 이동
+    for(let i=0;i<NDRUM;i++){
+      if(zone.indexOf(cellSpan(i)) < 0) continue;
+      if(dayOld[i] > bestDay){ bestDay = dayOld[i]; best = i; }
+    }
+  }
+  if(best < 0){ // 안전망 (담당 동 자체가 없을 때)
+    const spanIdx = zone[0] || 0;
+    c.targetX = spanIdx*GW + (c.aisle===0?A1C:A2C);
+    c.targetZ = rng(1.5, GL-1.5);
+    c.targetTierY = TY[1];
+    return;
+  }
+  const aisle = cellAisle(best);
+  c.aisle = aisle;                               // 임박 셀이 있는 통로로 전환
+  c.targetX = cellSpan(best)*GW + (aisle===0?A1C:A2C);
+  c.targetZ = cellZ(best);
+  c.targetTierY = cellTierY(best);               // 조정실 카메라 상하 포커스용 (작업 셀의 단 높이)
 }
 
 /* ── 메인 루프 ── */
@@ -2321,8 +2377,13 @@ function loop(ts){
       const finalDx = c.targetX - c.x, finalDz = c.targetZ - c.z;
       const finalDist = Math.hypot(finalDx, finalDz);
       if(finalDist < .15){
-        c.state = c.carrying ? 2 : 1;
-        c.stateTimer = 0;
+        if(c._toCharge){           // 충전소 복귀 도착 → 충전(예비) 모드
+          c._toCharge = false;
+          c.state = 4; c.stateTimer = 0;
+        }else{
+          c.state = c.carrying ? 2 : 1;
+          c.stateTimer = 0;
+        }
       }else if(dist > .05){
         const spd = 1.4;
         c.x += dx/dist * spd * dt;
@@ -2385,7 +2446,7 @@ function loop(ts){
         c.state = 2;
         c.stateTimer = 0;
       }
-      if(c.stateTimer > 30){  // 타임아웃 안전장치
+      if(c.stateTimer > 12){  // 타임아웃 단축 (AMR 대기 병목 완화)
         c.state = 2; c.stateTimer = 0;
       }
     }
@@ -2419,7 +2480,7 @@ function loop(ts){
         c.state = 7;  // IN 누리셀 수령 시작
         c.stateTimer = 0;
       }
-      if(c.stateTimer > 25){  // 타임아웃 (AMR이 안 와도 사이클 종료)
+      if(c.stateTimer > 10){  // 타임아웃 단축 (IN 대기 병목 완화)
         c._endCycle = true;
       }
       if(c._endCycle){
@@ -2431,9 +2492,15 @@ function loop(ts){
           if(c.cycleTimes.length > 10) c.cycleTimes.shift();
         }
         c.cycleStart = Date.now();
-        c.state = c.battery < 25 ? 3 : 0;
-        c.stateTimer = 0;
-        if(c.state===0) pickNewTarget(c);
+        if(c.battery < 25){
+          // 배터리 부족 → 충전소로 복귀 후 충전(state 4). 예비가 자동 교대 투입.
+          c._toCharge = true;
+          c.targetX = c.homeX; c.targetZ = c.homeZ;
+          c.state = 0; c.stateTimer = 0;
+        }else{
+          c.state = 0; c.stateTimer = 0;
+          pickNewTarget(c);
+        }
       }
     }
     else if(c.state===7){ // IN 누리셀 받아서 빈 랙에 적재 (역방향 픽업 시퀀스)
@@ -2472,9 +2539,15 @@ function loop(ts){
           if(c.cycleTimes.length > 10) c.cycleTimes.shift();
         }
         c.cycleStart = Date.now();
-        c.state = c.battery < 25 ? 3 : 0;
-        c.stateTimer = 0;
-        if(c.state===0) pickNewTarget(c);
+        if(c.battery < 25){
+          // 배터리 부족 → 충전소로 복귀 후 충전(state 4). 예비가 자동 교대 투입.
+          c._toCharge = true;
+          c.targetX = c.homeX; c.targetZ = c.homeZ;
+          c.state = 0; c.stateTimer = 0;
+        }else{
+          c.state = 0; c.stateTimer = 0;
+          pickNewTarget(c);
+        }
       }
     }
     else if(c.state===3){ // 대기
@@ -2492,18 +2565,24 @@ function loop(ts){
         }
       }
     }
-    else if(c.state===4){ // 충전 (C-03 예비, 완전 정지)
-      // 충전: 80~100% 사이를 천천히 사이클 (트리클 충전 시각화)
+    else if(c.state===4){ // 충전/예비 (완전 정지)
+      // 충전: 100%까지
       if(c.battery < 100){
         c.battery = Math.min(100, c.battery + .35*dt);
       }
-      // 위치 완전 고정 (homeX, homeZ로 부드럽게 수렴)
+      // 위치 고정 (homeX, homeZ로 수렴)
       c.x += (c.homeX - c.x) * Math.min(1, dt*4);
       c.z += (c.homeZ - c.z) * Math.min(1, dt*4);
-      // 팔도 홈 자세 고정
       armLerp(arm, Math.min(1, dt*4), POSE_HOME);
-      // 바퀴 정지
-      // 예비 캐리어는 자동 출동하지 않음 — 수동 디스패치만
+      // 3대 교대 가동: 가동 중인 캐리어가 2대 미만이면 충전 완료된 예비가 출동
+      //   (다른 캐리어가 배터리 부족으로 충전 들어가면 예비가 빈자리 메움)
+      const isActive = s => (s>=0 && s<=2) || s===5 || s===6 || s===7;  // 가동 상태(충전4·대기3 제외)
+      const activeNow = carriers.filter(x=>isActive(x.state)).length;
+      if(c.battery >= 90 && activeNow < 2){
+        c.state = 0; c.stateTimer = 0;
+        if(c.cycleStart === 0) c.cycleStart = Date.now();
+        pickNewTarget(c);
+      }
     }
 
     // 위치 반영
@@ -2530,12 +2609,11 @@ function loop(ts){
     // 배터리 자연 감소
     if(c.state<3) c.battery = Math.max(0, c.battery - .12*dt);
 
-    // 운영효율 메트릭 누적 (C-03 충전은 가동 시간 제외)
-    if(c.id !== 'C-03'){
-      c.totalMs += dt*1000;
-      if(c.state===0 || c.state===1 || c.state===2 || c.state===5){
-        c.activeMs += dt*1000;
-      }
+    // 운영효율 메트릭 누적 (3대 모두 — C-03도 교대 가동).
+    // totalMs=경과시간(처리율 분모), activeMs=실제 가동(주행~인계) 시간.
+    c.totalMs += dt*1000;
+    if(c.state===0 || c.state===1 || c.state===2 || c.state===5 || c.state===6 || c.state===7){
+      c.activeMs += dt*1000;
     }
   });
 
@@ -2959,6 +3037,19 @@ function tick(){
   const totalCnt = carriers.length;
   document.getElementById('kt-cr').textContent=`${activeCnt}/${totalCnt}`;
 
+  /* KPI: 처리량 (건/h) — 1사이클=OUT 1+IN 1=2건. 목표 200기/20h=10건/h.
+     누적 cycles와 경과시간(가장 오래 가동된 캐리어 기준)으로 실시간 환산. */
+  const totalCycles = carriers.reduce((a,c)=>a+c.cycles,0);
+  const maxElapsedH = Math.max(...carriers.map(c=>c.totalMs)) / 3600000;  // 시간
+  const tphEl = document.getElementById('kt-tph');
+  if(tphEl && maxElapsedH > 0.0005){
+    const tph = (totalCycles * 2) / maxElapsedH;   // 건/h
+    tphEl.textContent = tph.toFixed(0);
+    // 목표 10건/h 대비: 충족 녹색, 미달 주황
+    tphEl.className = 'kv ' + (tph >= 10 ? '' : 'w');
+    tphEl.style.color = tph >= 10 ? '#5DCAA5' : '#EF9F27';
+  }
+
   /* AMR 풀 패널 갱신 */
   const qLen = document.getElementById('queue-len');
   if(qLen) qLen.textContent = workQueue.length;
@@ -3122,15 +3213,55 @@ function tick(){
     }
   }
 
-  const solPct=Math.min(100,Math.max(15,ns(T,67,17,0)));
-  const solKw=Math.round(solPct*4.56);
-  const ess=Math.min(100,Math.max(20,ns(T,76,10,1.2)));
-  const diff=solKw-456;
-  document.getElementById('e-sg').textContent=solKw+' kW ('+solPct.toFixed(0)+'%)';
-  document.getElementById('e-sb').style.width=solPct+'%';
-  document.getElementById('e-es').textContent=ess.toFixed(0)+'% / 3,650 kWh';
-  const de=document.getElementById('e-df');de.textContent=(diff>=0?'+':'')+diff.toFixed(0)+' kW';de.style.color=diff>=0?'#5DCAA5':'#EF9F27';
-  document.getElementById('kt-sl').textContent=solPct.toFixed(0)+'%';
+  /* ── 전력 수지 + ESS 운영 ──
+     태양광(시간대 기반) − 부하(LED+설비+물류) = 잉여/부족.
+     잉여>0: ESS 충전(SOC↑) / 부족: ESS 방전으로 보충(SOC↓).
+     계통수급 = 태양광 + ESS방전 − 부하. 예비전력 = SOC × 용량. */
+  const eHour = (now.getHours() + now.getMinutes()/60);
+  const eSolRatio = Math.max(0, Math.sin((eHour - 6) / 12 * Math.PI));  // 6~18시 sin
+  const SOLAR_PEAK_KW = 480;
+  const solKw = Math.round(eSolRatio * SOLAR_PEAK_KW + ns(T, 0, 8, 0));
+  const solPct = Math.round(eSolRatio * 100);
+  // 부하: 베이스(설비·펌프·통신) + LED 실측 + 캐리어 가동분
+  const carriersActive = carriers.filter(x=>x.state>=0 && x.state<=2 || x.state===5||x.state===6||x.state===7).length;
+  const loadKw = Math.round(180 + ledKw*1.0 + carriersActive*18 + ns(T, 0, 12, 0.5));
+  // 수지 → ESS 충/방전 (kW). 양수=잉여(충전), 음수=부족(방전)
+  let surplusKw = solKw - loadKw;
+  const dtHr = 2.2 / 3600;  // tick 간격(2.2초)을 시간으로
+  let essFlowKw = 0;  // +충전 / -방전 (계통에 반영되는 실제 ESS 동작)
+  if(surplusKw > 0){
+    // 잉여 → 충전 (SOC 상한까지)
+    const room = (ESS_SOC_MAX - essSOC) * ESS_CAP_KWH;
+    essFlowKw = Math.min(surplusKw, room/dtHr);
+    essSOC = Math.min(ESS_SOC_MAX, essSOC + essFlowKw*dtHr/ESS_CAP_KWH);
+  }else if(surplusKw < 0){
+    // 부족 → 방전 (SOC 하한까지) 으로 보충
+    const avail = (essSOC - ESS_SOC_MIN) * ESS_CAP_KWH;
+    const need = -surplusKw;
+    essFlowKw = -Math.min(need, avail/dtHr);
+    essSOC = Math.max(ESS_SOC_MIN, essSOC + essFlowKw*dtHr/ESS_CAP_KWH);
+  }
+  // 계통 수급: 태양광 + ESS방전(-essFlow의 음수면 +) − 부하
+  const gridKw = solKw - essFlowKw - loadKw;  // +면 계통 역송(잉여), -면 계통 수전(부족)
+  const reserveKwh = essSOC * ESS_CAP_KWH;    // 예비전력(가용 저장 에너지)
+
+  document.getElementById('e-sg').textContent = solKw+' kW ('+solPct+'%)';
+  document.getElementById('e-sb').style.width = solPct+'%';
+  document.getElementById('e-ld').textContent = loadKw+' kW';
+  const elb = document.getElementById('e-lb'); if(elb) elb.style.width = Math.min(100, loadKw/6)+'%';
+  document.getElementById('e-es').textContent = (essSOC*100).toFixed(0)+'% / '+ESS_CAP_KWH.toLocaleString()+' kWh';
+  const eeb = document.getElementById('e-eb'); if(eeb){ eeb.style.width=(essSOC*100).toFixed(0)+'%'; eeb.style.background = essSOC<0.25?'#EF9F27':'#2EC4B6'; }
+  const efl = document.getElementById('e-fl');
+  if(efl){
+    if(essFlowKw > 1){ efl.textContent='▲ 충전 '+essFlowKw.toFixed(0)+' kW'; efl.style.color='#5DCAA5'; }
+    else if(essFlowKw < -1){ efl.textContent='▼ 방전 '+(-essFlowKw).toFixed(0)+' kW'; efl.style.color='#EF9F27'; }
+    else { efl.textContent='유지'; efl.style.color='#7a9a8a'; }
+  }
+  document.getElementById('e-rs').textContent = reserveKwh.toFixed(0)+' kWh ('+(reserveKwh/ (loadKw||1)).toFixed(1)+'h)';
+  const de=document.getElementById('e-df');
+  de.textContent = (gridKw>=0?'역송 +':'수전 ')+Math.abs(gridKw).toFixed(0)+' kW';
+  de.style.color = gridKw>=0 ? '#5DCAA5' : '#EF9F27';
+  document.getElementById('kt-sl').textContent=solPct+'%';
   const avgT=spans.reduce((a,s)=>a+s.temp,0)/spans.length;
   document.getElementById('kt-tp').textContent=avgT.toFixed(1)+'°C';
   const alms=spans.filter(s=>s.status==='warning').length+1;
@@ -3230,7 +3361,7 @@ window.toggleView = function(){ window.setView(currentView==='cell' ? 'hw' : 'ce
    - ROTATE_MS 간격으로 누리셀 → HW → 설비 → … 순환
    - 사용자 조작(탭 클릭·마우스·휠·키·터치) 시 즉시 중단 + idle 타이머 리셋
    ══════════════════════════════════════════════════════ */
-const VIEW_ORDER = ['cell','hw','facility'];
+const VIEW_ORDER = ['cell','hw','facility','cockpit'];
 const IDLE_MS   = 20000;   // 20초 무조작 → 자동 순환 시작
 const ROTATE_MS = 12000;   // 12초마다 다음 탭
 let idleTimer = null, rotateTimer = null, autoPlaying = false;
