@@ -953,6 +953,64 @@ for(let si=0; si<SPAN; si++){
     });
   });
 
+  /* ── 천창 (Roof Vent) — 측창 없음. 지붕 능선 따라 Z방향 1열, 구간 분할 개폐
+     기온 높을수록 더 열림(자연환기). 경첩으로 한쪽이 들리는 패널 ── */
+  const roofVents = [];
+  const RV_N = 6;                       // 50m 하우스 → 천창 6구간
+  const RV_LEN = (GL-2)/RV_N;           // 각 천창 길이
+  const RV_Y = GH + .02;                // 지붕 높이
+  const RV_W = 1.6;                     // 천창 폭(X)
+  for(let v=0; v<RV_N; v++){
+    const vz = 1 + RV_LEN*(v+.5);
+    // 천창 프레임(고정 테두리)
+    facBox(RV_W+.1, .04, RV_LEN-.15, 0x2a4640, cx, RV_Y, vz, .05);
+    // 개폐 패널 (경첩축이 X- 쪽, Z축 회전으로 들림)
+    const panel = new THREE.Mesh(
+      new THREE.BoxGeometry(RV_W, .03, RV_LEN-.25),
+      new THREE.MeshLambertMaterial({color:0x8fd8e0, transparent:true, opacity:.5})
+    );
+    // 경첩 그룹 (한쪽 모서리 기준 회전)
+    const hinge = new THREE.Group();
+    hinge.position.set(cx - RV_W/2, RV_Y+.04, vz);
+    panel.position.set(RV_W/2, 0, 0);
+    hinge.add(panel);
+    facilityLayer.add(hinge);
+    roofVents.push(hinge);
+  }
+
+  /* ── 알루미늄 차광스크린 — 천창 아래, 천장 전체 수평면
+     일사량 多 + 고온 시 Z방향으로 펼쳐짐(전개). 은빛 반투명 알루미늄 ── */
+  const SCR_Y = GH - .28;               // 천창 아래
+  const screenGrp = new THREE.Group();
+  // 펼침 기준점: 동 입구쪽(Z=1)에서 출구쪽으로 슬라이드
+  const screen = new THREE.Mesh(
+    new THREE.BoxGeometry(GW-0.6, .02, GL-2),
+    new THREE.MeshLambertMaterial({color:0xc8d0d8, transparent:true, opacity:.55, emissive:0x3a4048, emissiveIntensity:.15})
+  );
+  screen.position.set(0, 0, (GL-2)/2);  // 그룹 원점이 Z=1, 면은 +Z로 뻗음
+  screenGrp.add(screen);
+  screenGrp.position.set(cx, SCR_Y, 1);
+  screenGrp.scale.z = 0.001;            // 초기 접힘
+  facilityLayer.add(screenGrp);
+  // 스크린 레일 (양쪽 고정, 항상 보임)
+  [-(GW-0.6)/2, (GW-0.6)/2].forEach(xo=>{
+    facPipe(new THREE.Vector3(cx+xo, SCR_Y, 1), new THREE.Vector3(cx+xo, SCR_Y, GL-1), .025, 0x5a6068, .6);
+  });
+
+  /* ── CO₂ 인젝터 — IN쪽 라인에서 분기, 동별 공급 노즐 + 분사 입자 ── */
+  const CO2_Y = TY[2];                  // 중간 높이 분사
+  // CO₂ 공급 배관 (IN측 → 동 중앙, Z방향 짧게)
+  facPipe(new THREE.Vector3(cx, CO2_Y, LINE_Z), new THREE.Vector3(cx, CO2_Y, GL*0.5), .03, 0xc8b050, .7);
+  // 노즐 3개 + 분사 입자
+  const co2Jets = [];
+  [GL*0.3, GL*0.5, GL*0.7].forEach(jz=>{
+    const nozzle = facBox(.10,.10,.10, 0xb0a040, cx, CO2_Y, jz, .15);
+    const jet = new THREE.Mesh(new THREE.SphereGeometry(.07,6,5),
+      new THREE.MeshBasicMaterial({color:0xe8e0a0, transparent:true, opacity:0}));
+    facilityLayer.add(jet);
+    co2Jets.push({ jet, cx, top: CO2_Y, z: jz, t: Math.random() });
+  });
+
   // 동별 라벨
   facLabel(`${si+1}동`, cx, GH+.3, GL+.6, '#5ee0e8', 1.4);
 
@@ -960,8 +1018,8 @@ for(let si=0; si<SPAN; si++){
   const thCv = document.createElement('canvas'); thCv.width=256; thCv.height=140;
   const thTex = new THREE.CanvasTexture(thCv);
   const thSpr = new THREE.Sprite(new THREE.SpriteMaterial({map:thTex, transparent:true, depthTest:false}));
-  thSpr.scale.set(4.2, 2.3, 1);
-  thSpr.position.set(cx, GH+2.4, GL*0.5);
+  thSpr.scale.set(4.8, 3.17, 1);   // 288×190 비율(1.52)
+  thSpr.position.set(cx, GH+2.8, GL*0.5);
   facilityLayer.add(thSpr);
 
   // 관수 흐름 패킷 (드롭관 따라 흐름)
@@ -993,36 +1051,50 @@ for(let si=0; si<SPAN; si++){
     hvacLoad: 40 + Math.random()*40,             // 가동률 %
     mode: Math.random()<.5 ? '냉방' : '난방',
     invHz: 45 + Math.random()*15,                // 인버터 출력 주파수 (Hz) → 팬 속도
-    thCv, thTex, thSpr, dripDrops                // 대형 온습도 패널 + 점적 물방울
+    thCv, thTex, thSpr, dripDrops,               // 대형 온습도 패널 + 점적 물방울
+    roofVents, ventOpen: 30 + Math.random()*40,  // 천창 + 개폐율 %
+    co2Jets, co2ppm: 700 + Math.random()*300,    // CO₂ 인젝터 + 농도 ppm
+    screenGrp, scrOpen: 0                         // 알루미늄 차광스크린 + 전개율 %
   });
 }
 
-/* 동별 온습도 패널 그리기 (tick에서 호출) */
+/* 동별 온습도 패널 그리기 (tick에서 호출) — 가독성 튜닝 */
 function drawThPanel(u){
   const s = spans[u.span];
   if(!s) return;
   const c = u.thCv.getContext('2d');
-  c.clearRect(0,0,256,140);
-  // 배경
-  c.fillStyle='rgba(8,22,32,.92)'; c.fillRect(0,0,256,140);
+  const W=288, H=190; if(u.thCv.width!==W){ u.thCv.width=W; u.thCv.height=H; }
+  c.clearRect(0,0,W,H);
   const warm = s.temp > 26, cold = s.temp < 22;
-  c.strokeStyle = warm ? '#ff6160' : (cold ? '#3aa0e0' : '#2ec4b6'); c.lineWidth=3; c.strokeRect(2,2,252,136);
-  // 동 번호
-  c.fillStyle='#7adcc8'; c.font='bold 18px Segoe UI,Malgun Gothic'; c.textAlign='left';
-  c.fillText(`${u.span+1}동`, 14, 26);
-  c.fillStyle = warm ? '#ff8070' : '#9FE1CB'; c.font='12px Segoe UI'; c.textAlign='right';
-  c.fillText(u.mode, 244, 24);
-  // 온도 (대형)
-  c.fillStyle = warm ? '#ff7060' : (cold ? '#5ab0e0' : '#5DCAA5');
-  c.font='bold 46px Segoe UI'; c.textAlign='left';
-  c.fillText(`${s.temp.toFixed(1)}°`, 14, 80);
-  // 습도
-  c.fillStyle='#7ab0e0'; c.font='bold 30px Segoe UI'; c.textAlign='right';
-  c.fillText(`${s.hum.toFixed(0)}%`, 244, 76);
-  // 하단 정보
-  c.fillStyle='#6a9a8a'; c.font='12px Courier New'; c.textAlign='left';
-  c.fillText(`EC ${s.ec.toFixed(2)}  pH ${s.ph.toFixed(2)}`, 14, 108);
-  c.fillStyle='#40e0d0'; c.fillText(`INV ${u.invHz.toFixed(0)}Hz · 팬 ${Math.round(u.hvacLoad)}%`, 14, 128);
+  const accent = warm ? '#ff6160' : (cold ? '#3aa0e0' : '#2ec4b6');
+  // 배경 + 헤더 바
+  c.fillStyle='rgba(10,26,36,.95)'; c.fillRect(0,0,W,H);
+  c.fillStyle = accent; c.fillRect(0,0,W,32);
+  c.strokeStyle = accent; c.lineWidth=3; c.strokeRect(2,2,W-4,H-4);
+  // 헤더: 동 번호 + 모드
+  c.fillStyle='#06141c'; c.font='bold 20px Segoe UI,Malgun Gothic'; c.textAlign='left';
+  c.fillText(`${u.span+1}동`, 14, 23);
+  c.font='bold 14px Segoe UI'; c.textAlign='right';
+  c.fillText(u.mode, W-14, 22);
+  // 온도 (대형) + 습도
+  c.fillStyle = warm ? '#ff7060' : (cold ? '#6ab8e8' : '#5DCAA5');
+  c.font='bold 52px Segoe UI'; c.textAlign='left';
+  c.fillText(`${s.temp.toFixed(1)}°`, 14, 88);
+  c.fillStyle='#8ac0ea'; c.font='bold 34px Segoe UI'; c.textAlign='right';
+  c.fillText(`${s.hum.toFixed(0)}%`, W-14, 84);
+  c.fillStyle='#6a9a8a'; c.font='11px Segoe UI'; c.textAlign='left'; c.fillText('기온', 16, 104);
+  c.textAlign='right'; c.fillText('습도', W-16, 104);
+  // 구분선
+  c.strokeStyle='rgba(106,154,138,.3)'; c.lineWidth=1; c.beginPath(); c.moveTo(12,118); c.lineTo(W-12,118); c.stroke();
+  // 하단 2열: 좌(관수/양액) 우(환경제어)
+  c.font='13px Courier New'; c.textAlign='left';
+  c.fillStyle='#7af0e0'; c.fillText(`EC ${s.ec.toFixed(2)}  pH ${s.ph.toFixed(2)}`, 14, 138);
+  c.fillStyle='#e8e0a0'; c.fillText(`CO₂ ${Math.round(u.co2ppm)} ppm`, 14, 158);
+  c.fillStyle='#40e0d0'; c.fillText(`INV ${u.invHz.toFixed(0)}Hz`, 14, 178);
+  c.textAlign='right';
+  c.fillStyle='#5ee0e8'; c.fillText(`천창 ${Math.round(u.ventOpen)}%`, W-14, 138);
+  c.fillStyle = u.scrOpen>10 ? '#d0d8e0' : '#4a5258'; c.fillText(`차광 ${Math.round(u.scrOpen)}%`, W-14, 158);
+  c.fillStyle='#ffae6a'; c.fillText(`팬 ${Math.round(u.hvacLoad)}%`, W-14, 178);
   u.thTex.needsUpdate = true;
 }
 
@@ -2519,6 +2591,15 @@ function loop(ts){
         dp.mesh.position.set(dp.rx, y, dp.z);
         dp.mesh.material.opacity = .85 * (1 - dp.t*.5);
       });
+      // ── CO₂ 분사 입자 (노즐 → 퍼짐). 고농도 공급 중일 때만 ──
+      const injecting = u.co2ppm > 700;
+      u.co2Jets.forEach(jt=>{
+        if(!injecting){ jt.jet.material.opacity = 0; return; }
+        jt.t = (jt.t + dt*0.7) % 1;
+        jt.jet.position.set(jt.cx + Math.sin(jt.t*6)*.2, jt.top - jt.t*.6, jt.z);
+        jt.jet.material.opacity = .6 * (1 - jt.t);
+        jt.jet.scale.setScalar(1 + jt.t*1.5);   // 퍼지며 커짐
+      });
     });
   }
 
@@ -3169,6 +3250,9 @@ pushFacLog('<span style="color:#2ec4b6">●</span> 양액 펌프 가동 · EC �
 pushFacLog('<span style="color:#ff7a3c">●</span> HVAC 5동 운전 중');
 
 function simFacility(){
+  // 현재 시각 기반 일사량 (6~18시 sin 곡선, 0~1)
+  const nowH = new Date().getHours() + new Date().getMinutes()/60;
+  const solRatio = Math.max(0, Math.sin((nowH - 6) / 12 * Math.PI));
   facUnits.forEach(u=>{
     const s = spans[u.span];
     // 관수: EC/pH 따라 밸브 개도 + 유량 변동
@@ -3184,16 +3268,35 @@ function simFacility(){
     // 인버터(VFD) 출력 주파수: 온도 편차 클수록 팬 빠르게 (가변속 제어)
     const tempErr = Math.abs(t - 23);
     u.invHz = Math.max(20, Math.min(60, 35 + tempErr*8 + (Math.random()-.5)*3));
+
+    // 천창 개폐율: 기온 높을수록 더 열림 (자연환기). 25°C 기준 점진
+    const ventTarget = Math.max(0, Math.min(100, (t - 22) * 28 + (Math.random()-.5)*6));
+    u.ventOpen += (ventTarget - u.ventOpen) * 0.15;
+    // CO₂ 농도: 주간(광합성) 공급 → 800~1000ppm, 야간 낮음. 분사 시 변동
+    const co2Target = solRatio > 0.15 ? 850 + solRatio*200 : 450 + Math.random()*80;
+    u.co2ppm += (co2Target - u.co2ppm) * 0.1;
+    // 알루미늄 차광스크린: 일사량 多 + 고온 시 전개
+    const scrTarget = (solRatio > 0.5 && t > 25)
+      ? Math.min(100, (solRatio-0.5)*120 + (t-25)*15)
+      : (solRatio > 0.7 ? (solRatio-0.7)*200 : 0);
+    u.scrOpen += (Math.max(0,Math.min(100,scrTarget)) - u.scrOpen) * 0.08;
+
     // 드물게 이벤트
     if(Math.random() < 0.008){
       if(u.ec > 2.4) pushFacLog(`<span style="color:#EF9F27">⚠</span> ${u.span+1}동 EC ${u.ec.toFixed(2)} 높음 → 희석수 밸브 개방`);
+      else if(u.scrOpen > 60) pushFacLog(`<span style="color:#c8d0d8">▦</span> ${u.span+1}동 차광스크린 ${u.scrOpen.toFixed(0)}% 전개 (일사 차단)`);
+      else if(u.ventOpen > 70) pushFacLog(`<span style="color:#5ee0e8">△</span> ${u.span+1}동 천창 ${u.ventOpen.toFixed(0)}% 개방 (자연환기)`);
       else if(u.mode==='냉방') pushFacLog(`<span style="color:#2ec4b6">●</span> ${u.span+1}동 냉방 가동 · 공급 ${u.supplyTemp.toFixed(1)}°C`);
     }
-    // 3D 밸브 개도 반영 (개도 낮으면 어둡게)
+    // 3D 밸브 개도 반영
     if(u.valve){
       const open = u.valveOpen/100;
       u.valve.material.emissiveIntensity = .1 + open*.5;
     }
+    // 3D 천창 개폐 (경첩 회전, 최대 ~50도)
+    u.roofVents.forEach((h,vi)=>{ h.rotation.z = -(u.ventOpen/100) * Math.PI*0.28; });
+    // 3D 차광스크린 전개 (Z방향 슬라이드)
+    if(u.screenGrp) u.screenGrp.scale.z = Math.max(0.001, u.scrOpen/100);
   });
 }
 
@@ -3248,11 +3351,13 @@ function buildFacPanel(){
   const hr = document.getElementById('hvacRows');
   if(hr) hr.innerHTML = facUnits.map(u=>{
     const col = u.mode==='냉방'?'#2a7fd4':u.mode==='난방'?'#ff7a3c':'#7a9a8a';
+    const scrCol = u.scrOpen>10 ? '#d0d8e0' : '#6a9a8a';
     return `<div class="ccard active" style="border-color:${col}44;padding:6px 9px">
-      <div class="ch"><span class="cn" style="color:#ffae6a;font-size:12px">${u.span+1}동 FCU+INV</span><span class="cstate ${u.mode==='냉방'?'chg':'pick'}" style="font-size:9px">${u.mode}</span></div>
-      <div class="crow"><span class="ck">공급온도</span><span class="cv">${u.supplyTemp.toFixed(1)}°C</span></div>
-      <div class="crow"><span class="ck">가동률</span><span class="cv">${Math.round(u.hvacLoad)}%</span></div>
+      <div class="ch"><span class="cn" style="color:#ffae6a;font-size:12px">${u.span+1}동 환경제어</span><span class="cstate ${u.mode==='냉방'?'chg':'pick'}" style="font-size:9px">${u.mode}</span></div>
+      <div class="crow"><span class="ck">공급온도</span><span class="cv">${u.supplyTemp.toFixed(1)}°C · 팬 ${Math.round(u.hvacLoad)}%</span></div>
       <div class="crow"><span class="ck">인버터 출력</span><span class="cv" style="color:#40e0d0">${u.invHz.toFixed(1)} Hz</span></div>
+      <div class="crow"><span class="ck">천창 / CO₂</span><span class="cv"><span style="color:#5ee0e8">${Math.round(u.ventOpen)}%</span> / <span style="color:#e8e0a0">${Math.round(u.co2ppm)}ppm</span></span></div>
+      <div class="crow"><span class="ck">차광스크린</span><span class="cv" style="color:${scrCol}">${Math.round(u.scrOpen)}% ${u.scrOpen>10?'전개':'접힘'}</span></div>
     </div>`;
   }).join('');
   // 로그
