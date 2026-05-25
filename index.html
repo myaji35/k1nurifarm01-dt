@@ -2150,6 +2150,10 @@ function loop(ts){
     for(let qi=workQueue.length-1; qi>=0; qi--){
       const req = workQueue[qi];
       const wantKind = req.kind==='delivery-in' ? 'in' : 'out';
+      // 통로 점유 1대 원칙: 해당 캐리어 통로에 이미 작업(진입~인계~복귀) 중인 AMR이 있으면
+      //   새 AMR을 통로에 들이지 않음 → 다음 tick까지 사이드 대기. (좁은 통로 정체 방지)
+      const laneBusy = amrPool.some(a => a.homeCarrier===req.carrier.id && a.state>=1 && a.state<=4);
+      if(laneBusy) continue;
       const amr = amrPool.find(a => a.homeCarrier===req.carrier.id && a.kind===wantKind
                                     && a.state===0 && !a.role && !a.hasDrum);
       if(!amr) continue;            // 전담 AMR이 아직 바쁘면 대기 (다음 tick)
@@ -2179,25 +2183,15 @@ function loop(ts){
     a.stateTimer += dt;
     const v = a.vis;
 
-    if(a.state===0){ // 대기 — 담당 캐리어를 따라다님 (전담 페어링)
+    if(a.state===0){ // 대기 — 사이드 통로(횡단통로)에서 줄서기 (통로 점유 1대 원칙)
+      // 통로 좁음 → 작업 AMR 1대만 통로 진입. 대기 AMR은 담당 캐리어 통로 입구 쪽
+      // 횡단통로(CROSS_AISLE_Z)에서 slot별로 줄서서 대기. 통로엔 진입하지 않음.
       const hc = carriers.find(c=>c.id===a.homeCarrier);
-      // 담당 캐리어가 가동 중(주행~작업)이면 그 통로 옆에서 동행, 충전/대기면 home으로
-      const carrierWorking = hc && hc.state!==4 && hc.state!==3;
-      let followX, followZ;
-      if(carrierWorking){
-        // 캐리어 전방(Z+, 조정실 카메라 시야)에 대기열로 줄지어 동행 (다리 사이 통과 동선).
-        //   IN-AMR: 전방에 슬롯별로 줄서기(자재 공급 대기열), 통로 좌측에 약간 치우침
-        //   OUT-AMR: 전방 우측에 대기(수확 받기)
-        if(a.kind==='in'){
-          followX = hc.x - 0.55;                       // 통로 좌측
-          followZ = hc.z + 1.6 + a.followSlot*1.5;     // 전방으로 줄지어(슬롯 간격 1.5m)
-        }else{
-          followX = hc.x + 0.55;                       // 통로 우측
-          followZ = hc.z + 1.6 + a.followSlot*1.5;
-        }
-      }else{
-        followX = a.homeX; followZ = a.homeZ;               // 대기소 복귀
-      }
+      const aisleX = hc ? hc.x : a.homeX;
+      // IN/OUT을 좌우로, 같은 kind는 followSlot으로 횡단통로 위에서 분산
+      const sideX = aisleX + (a.kind==='in' ? -0.6 : 0.6) + a.followSlot*0.0;
+      const sideZ = CROSS_AISLE_Z + a.followSlot*0.9;   // 횡단통로에서 줄서기
+      const followX = sideX, followZ = sideZ;
       a.x += (followX - a.x) * Math.min(1, dt*2.5);
       a.z += (followZ - a.z) * Math.min(1, dt*2.5);
       const idleClr = a.kind==='in' ? 0x40a0ff : 0xffa040;
