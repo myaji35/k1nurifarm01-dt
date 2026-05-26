@@ -148,9 +148,9 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   <div id="lp">
     <div class="ptit env-only">하우스별 현황</div>
     <div id="scards" class="env-only"></div>
-    <div class="ptit env-only" style="margin-top:10px">Straddle Carrier 운용 (6축 로봇암)</div>
+    <div class="ptit env-only" style="margin-top:10px">Straddle Carrier 운용 (XYZ 직교 갠트리)</div>
     <div class="env-only" style="font-size:9px;color:#6a9a8a;line-height:1.4;margin-bottom:6px;padding:4px 6px;background:rgba(217,176,32,.05);border-left:2px solid rgba(217,176,32,.4);border-radius:2px">
-      4족 자주식 캐리어 + 상단 6축 로봇암 + 포크<br>
+      4족 자주식 캐리어 + 상단 직교 갠트리(X·Y) + 3way 텔레스코픽 포크<br>
       C-01·C-02 주력 · C-03 예비<br>
       ↕ AMR-IN/OUT 셔틀 인계 → 양쪽 컨베이어
     </div>
@@ -293,7 +293,7 @@ const DZ=[];for(let i=0;i<DZ_N;i++)DZ.push(DZ_0+i*DZ_GAP);
 const NDRUM=SPAN*RACKXC.length*TY.length*DZ.length;
 
 /* Straddle Carrier 상수 — 좁은 통로(1.67m) 대응 소형화 (2026-05-25)
-   폭 1.5m: 통로 1.67m에 여유 운행. 다리 안쪽(1.5-0.36=1.14m)에서 1m 누리셀 픽업(빠듯, 6축 수평유지). */
+   폭 1.5m: 통로 1.67m에 여유 운행. 다리 안쪽(1.5-0.36=1.14m)에서 1m 누리셀 픽업(빠듯, 직교 갠트리 수평유지). */
 const CARRIER_W=1.50;    // 폭 (X축) — 통로 1.67m 수용
 const CARRIER_L=1.80;    // 길이 (Z축, 횡단 통로 통과)
 const CARRIER_H=5.00;    // 높이 (드럼 4단 5.13m을 걸치는 높이)
@@ -331,6 +331,7 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x10202e);
 scene.fog=new THREE.FogExp2(0x10202e,.004);   // GL=50m 하우스 → 옅게(끝까지 보이게)
 const cam=new THREE.PerspectiveCamera(40,ctr.clientWidth/ctr.clientHeight,.1,500);
+const _tmpV=new THREE.Vector3();   // 월드좌표 계산용 재사용 벡터 (픽&플레이스 운반)
 const ren=new THREE.WebGLRenderer({antialias:true});
 ren.setPixelRatio(Math.min(devicePixelRatio,2));
 ren.setSize(ctr.clientWidth,ctr.clientHeight);
@@ -1481,101 +1482,85 @@ function buildStraddleCarrier(id, zone, isStandby){
   cabinBase.position.set(cabin.position.x, wheelR*2+.06, cabin.position.z);grp.add(cabinBase);
 
   // ══════════════════════════════════════════════════════
-  // 6축 로봇암 (천장 매달림 / ceiling-mounted)
-  // 상부 빔에 거꾸로 매달려 팔이 아래로 처짐
-  // 작업공간: 캐리어 4기둥 안쪽 + 옆 AMR 위치
-  // J1(base, Y회전) → J2(shoulder, Z회전) → J3(elbow, Z회전)
-  //   → J4(wrist1, X회전) → J5(wrist2, Z회전) → J6(wrist3, Y회전)
+  // XYZ 직교 갠트리 + 3way 텔레스코픽 포크 (2026-05-26 재설계)
+  //   6축 로봇팔 → 직교 갠트리로 전환. 누리셀 수평유지가 구조로 보장됨.
+  //   X(trolley): 상부 가로레일 위 좌/우 랙 선택  (로컬 ±)
+  //   Y(carriage): 수직 마스트 따라 단(tier) 높이로 상하  (월드 Y 직접)
+  //   Z(캐리어 주행): 열 정렬은 캐리어 본체가 담당 → 갠트리는 X·Y만
+  //   포크: 캐리지에서 좌/우 랙으로 수평 인출(3way 텔레스코픽), 셀은 항상 수평
+  //   작업공간: 캐리어 4기둥 안쪽(랙 픽업) + 캐리어 아래 AMR 위치(인계)
   // ══════════════════════════════════════════════════════
   const armColors = {
-    base: 0x2a2f38, link: 0xe0c040, joint: 0x303840, fork: 0x55bbff
+    rail: 0x2a2f38, mast: 0xe0c040, carriage: 0x303840, fork: 0x55bbff
   };
-  const matArmBase = new THREE.MeshLambertMaterial({color:armColors.base});
-  const matArmLink = new THREE.MeshLambertMaterial({color:armColors.link});
-  const matArmJoint = new THREE.MeshLambertMaterial({color:armColors.joint});
+  const matRail = new THREE.MeshLambertMaterial({color:armColors.rail});
+  const matMast = new THREE.MeshLambertMaterial({color:armColors.mast});
+  const matCarriage = new THREE.MeshLambertMaterial({color:armColors.carriage});
   const matFork = new THREE.MeshLambertMaterial({color:armColors.fork});
 
-  const armRootY = H - beamH;   // 상부 빔 바로 아래 (천장 매달림)
+  const armRootY = H - beamH;   // 상부 빔 바로 아래 (갠트리 가로레일 높이)
+  // 트롤리 X 가동 범위: 다리 안쪽 (좌/우 랙 진입). halfW≈0.75 → ±0.42
+  const TROLLEY_X = halfW - .33;
 
-  // J1 base — 천장에 거꾸로 매달림 (디스크가 위, 필러가 아래로)
-  const j1 = new THREE.Group();
-  // 천장 마운트 디스크
-  const baseDisc = new THREE.Mesh(new THREE.CylinderGeometry(.32,.36,.14,16), matArmBase);
-  baseDisc.position.y = -.07; j1.add(baseDisc);
-  // 회전 어깨 (아래쪽)
-  const basePillar = new THREE.Mesh(new THREE.CylinderGeometry(.20,.22,.30,12), matArmLink);
-  basePillar.position.y = -.30; j1.add(basePillar);
-  j1.position.set(0, armRootY, 0);
-  grp.add(j1);
+  // ── 가로레일 (브리지) — 상부 빔 아래 X방향 고정 레일 (트롤리가 그 위를 주행)
+  const railGeo = new THREE.BoxGeometry(W - legW, .12, .16);
+  const gantryRail = new THREE.Mesh(railGeo, matRail);
+  gantryRail.position.set(0, armRootY - .08, 0); grp.add(gantryRail);
 
-  // J2 shoulder — basePillar 아래에 매달림
-  const j2 = new THREE.Group();
-  const j2joint = new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.32,14), matArmJoint);
-  j2joint.rotation.z = Math.PI/2; j2.add(j2joint);
-  // Upper arm (J2 → J3) 길이 1.0, 기본 방향 -X (아래로 처지는 자세에서 X쪽으로 뻗음)
-  const upperArm = new THREE.Mesh(new THREE.BoxGeometry(1.0, .18, .22), matArmLink);
-  upperArm.position.set(.50, 0, 0); j2.add(upperArm);
-  j2.position.set(0, -.48, 0);  // base 아래
-  j1.add(j2);
+  // ── 트롤리 (X축) — 레일 위를 좌우 이동하는 새들. 자식으로 마스트·캐리지·포크 전부.
+  const trolley = new THREE.Group();
+  trolley.position.set(0, armRootY - .14, 0);   // 레일 바로 아래
+  grp.add(trolley);
+  // 트롤리 본체 박스
+  const trolleyBody = new THREE.Mesh(new THREE.BoxGeometry(.40, .20, .34), matCarriage);
+  trolleyBody.position.y = -.05; trolley.add(trolleyBody);
 
-  // J3 elbow
-  const j3 = new THREE.Group();
-  const j3joint = new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.26,14), matArmJoint);
-  j3joint.rotation.z = Math.PI/2; j3.add(j3joint);
-  const forearm = new THREE.Mesh(new THREE.BoxGeometry(.85, .15, .18), matArmLink);
-  forearm.position.set(.425, 0, 0); j3.add(forearm);
-  j3.position.set(1.0, 0, 0);
-  j2.add(j3);
+  // ── 수직 마스트 (Y가이드) — 트롤리에 매달려 아래로 뻗음. 캐리지가 이 안에서 상하.
+  const mastLen = armRootY - .14 - TY[0] + .3;   // 최하단 단(TY[0]) 아래까지 닿게
+  const mast = new THREE.Mesh(new THREE.BoxGeometry(.14, mastLen, .14), matMast);
+  mast.position.y = -.16 - mastLen/2; trolley.add(mast);
 
-  // J4 wrist1
-  const j4 = new THREE.Group();
-  const j4joint = new THREE.Mesh(new THREE.CylinderGeometry(.10,.10,.20,12), matArmJoint);
-  j4joint.rotation.z = Math.PI/2; j4.add(j4joint);
-  j4.position.set(.85, 0, 0);
-  j3.add(j4);
+  // ── 캐리지 (Y축) — 마스트를 따라 오르내리는 가동 캐리지. 포크가 여기 부착.
+  //   carriage.position.y(로컬, trolley 기준)를 월드 단 높이로 역산해 설정.
+  const carriage = new THREE.Group();
+  carriage.position.set(0, -.6, 0); trolley.add(carriage);
+  const carriageBody = new THREE.Mesh(new THREE.BoxGeometry(.30, .34, .30), matCarriage);
+  carriage.add(carriageBody);
 
-  // J5 wrist2
-  const j5 = new THREE.Group();
-  const j5joint = new THREE.Mesh(new THREE.SphereGeometry(.11, 12, 10), matArmJoint);
-  j5.add(j5joint);
-  j5.position.set(.16, 0, 0);
-  j4.add(j5);
-
-  // J6 wrist3 + 엔드이펙터(포크) — 손이 아래 방향
-  const j6 = new THREE.Group();
-  const j6joint = new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,.14,10), matArmJoint);
-  j6joint.rotation.z = Math.PI/2; j6.add(j6joint);
+  // ── 3way 텔레스코픽 포크 — 캐리지에서 X+ 방향(우측 랙)으로 수평 인출.
+  //   forkGroup.position.x가 슬라이드 변위(0=후퇴, +=랙 인입).
+  //   좌측 랙 작업 시 trolley.scale.x = -1 미러링 대신, 포크는 X+ 고정 기준.
+  const forkGroup = new THREE.Group();
+  carriage.add(forkGroup);
   // 포크 마운트 플레이트
-  const forkMount = new THREE.Mesh(new THREE.BoxGeometry(.10, .26, .26), matArmLink);
-  forkMount.position.set(.08, 0, 0); j6.add(forkMount);
-  // 포크 2갈래 — X+ 방향(손끝)으로 뻗음
-  const forkBarGeo = new THREE.BoxGeometry(.55, .04, .06);
+  const forkMount = new THREE.Mesh(new THREE.BoxGeometry(.12, .28, .30), matCarriage);
+  forkMount.position.set(.10, 0, 0); forkGroup.add(forkMount);
+  // 포크 2갈래 (텔레스코픽 1단 표현) — X+로 뻗음
+  const forkBarGeo = new THREE.BoxGeometry(.60, .045, .07);
   const fork1 = new THREE.Mesh(forkBarGeo, matFork);
-  fork1.position.set(.08 + .275, .07, 0); j6.add(fork1);
+  fork1.position.set(.10 + .30, .07, 0); forkGroup.add(fork1);
   const fork2 = new THREE.Mesh(forkBarGeo, matFork);
-  fork2.position.set(.08 + .275, -.07, 0); j6.add(fork2);
-  j6.position.set(.14, 0, 0);
-  j5.add(j6);
+  fork2.position.set(.10 + .30, -.07, 0); forkGroup.add(fork2);
+  const FORK_BASE_X = 0;   // forkGroup 슬라이드 기준 (0=후퇴)
 
-  // 그립된 드럼
+  // 그립된 드럼 (포크 끝 부착 — 누리셀이 포크 위에 수평으로 얹힘)
   const carryGeo = new THREE.CylinderGeometry(DR*.95, DR*.95, DW*.95, 14);
   const carryMat = new THREE.MeshLambertMaterial({color:0xff8c30, transparent:true, opacity:0});
   const carryDrum = new THREE.Mesh(carryGeo, carryMat);
-  carryDrum.rotation.z = Math.PI/2;
-  carryDrum.position.set(.08 + .55, 0, 0);
-  j6.add(carryDrum);
+  carryDrum.rotation.z = Math.PI/2;          // 수평 (직교라 항상 수평 보장)
+  carryDrum.position.set(.10 + .55, 0, 0);
+  forkGroup.add(carryDrum);
 
-  // ─ 초기 자세 (천장 매달림 → 팔이 아래로 처짐) ─
-  // J2를 -Math.PI/2 회전하면 upperArm이 -Y방향(아래)으로 뻗음
-  // J3을 +Math.PI*.6 회전하면 팔꿈치 접혀 forearm이 다시 옆으로
-  j1.rotation.y = 0;
-  j2.rotation.z = -Math.PI*.55;   // 아래쪽으로 처짐
-  j3.rotation.z =  Math.PI*.45;   // 팔꿈치 접힘
-  j4.rotation.x = 0;
-  j5.rotation.z = -Math.PI*.20;   // 손목 아래쪽
-  j6.rotation.y = 0;
+  // 운반 드럼 (scene 직속, 월드좌표) — 픽&플레이스 시 포크↔AMR 사이를 보간 이동.
+  // 평소 숨김. 누리셀이 랙→포크→AMR(또는 역순)로 옮겨가는 궤적을 시각화.
+  const transferGeo = new THREE.CylinderGeometry(DR*.95, DR*.95, DW*.95, 14);
+  const transferMat = new THREE.MeshLambertMaterial({color:0xff8c30, transparent:true, opacity:0});
+  const transferDrum = new THREE.Mesh(transferGeo, transferMat);
+  transferDrum.rotation.z = Math.PI/2;
+  scene.add(transferDrum);
 
-  const robotArm = {j1, j2, j3, j4, j5, j6, fork1, fork2, carryDrum, armRootY};
+  const robotArm = {trolley, carriage, forkGroup, fork1, fork2, carryDrum, transferDrum,
+                    armRootY, TROLLEY_X, FORK_BASE_X};
 
   // ── 경고등 (상부)
   const beaconGeo=new THREE.SphereGeometry(.12, 10, 8);
@@ -2386,42 +2371,30 @@ function loop(ts){
     v.grp.position.set(a.x, 0, a.z);
   });
 
-  /* ─ 로봇암 자세 헬퍼 ─ */
-  function armLerp(arm, phase, target){
-    // 6축 회전을 target 자세로 보간
+  /* ─ 직교 갠트리 운동학 헬퍼 (X 트롤리 + Y 캐리지) ─
+     자세(pose) = { x: 트롤리 로컬X (좌/우 랙 선택), y: 캐리지 월드Y (단 높이) }
+     6축 회전 보간(armLerp) 대신 2축 병진 보간. 누리셀은 포크 위 항상 수평. */
+  function gantryMove(arm, phase, pose){
     const lerp=(a,b,t)=>a+(b-a)*t;
-    arm.j1.rotation.y = lerp(arm.j1.rotation.y, target.j1, phase);
-    arm.j2.rotation.z = lerp(arm.j2.rotation.z, target.j2, phase);
-    arm.j3.rotation.z = lerp(arm.j3.rotation.z, target.j3, phase);
-    arm.j4.rotation.x = lerp(arm.j4.rotation.x, target.j4, phase);
-    arm.j5.rotation.z = lerp(arm.j5.rotation.z, target.j5, phase);
-    arm.j6.rotation.y = lerp(arm.j6.rotation.y, target.j6, phase);
+    // 트롤리 X (로컬)
+    arm.trolley.position.x = lerp(arm.trolley.position.x, pose.x, phase);
+    // 캐리지 Y: 월드 목표 높이 → 트롤리(armRootY-.14) 기준 로컬 Y로 역산
+    const localY = pose.y - (arm.armRootY - .14);
+    arm.carriage.position.y = lerp(arm.carriage.position.y, localY, phase);
   }
-  // 자세 프리셋 (천장 매달림 + 누리셀 수평 유지 우선)
-  // 누리셀은 항상 수평으로 누워야 함 → 손목(j5)을 자세에 따라 보정
-  // 작은 각도 변화로 부드러운 작업 수행
-  // HOME: 팔이 캐리어 안쪽 중앙에서 아래를 향함 (대기)
-  const POSE_HOME      = {j1: 0,             j2:-Math.PI*.50, j3: Math.PI*.40, j4:0, j5:-Math.PI*.15, j6:0};
-  // PICK_SIDE: 옆 랙으로 살짝만 회전(45도) — 수평 슬라이드 진입용
-  const POSE_PICK_SIDE = {j1: Math.PI*.45,   j2:-Math.PI*.50, j3: Math.PI*.40, j4:0, j5:-Math.PI*.15, j6:0};
-  // DROP_DOWN: HOME과 같지만 더 아래로 내려옴 (수직 하강 인계용)
-  const POSE_DROP_DOWN = {j1: 0,             j2:-Math.PI*.20, j3: Math.PI*.10, j4:0, j5:-Math.PI*.40, j6:0};
-  // 작업 단(tier) 높이 반영 픽업 자세: 낮은 단일수록 팔을 더 아래로 펴 내림.
-  //   tierY 5.13(최상단,J1 부근) → 팔 수평 / 0.78(최하단) → 팔 길게 아래로.
+  // 갠트리 자세 프리셋. y는 월드 단 높이(작업 시 targetTierY로 대체).
+  // HOME: 트롤리 중앙(x=0), 캐리지 중간 높이 (대기/주행)
+  const GAN_HOME_Y = TY[1] + .3;
+  const POSE_HOME      = { x: 0,           y: GAN_HOME_Y };
+  // DROP_DOWN: 캐리어 아래 AMR 인계 높이로 캐리지 하강 (트롤리 중앙)
+  const AMR_HANDOFF_Y  = CARRIER_H*0 + 1.3;   // AMR heldDrum 부근 높이
+  const POSE_DROP_DOWN = { x: 0,           y: AMR_HANDOFF_Y };
+  // 작업 단(tier) 높이 반영 픽업 자세: 트롤리를 랙 쪽으로, 캐리지를 단 높이로.
   //   대표님 요구: 포크가 상하(단)·좌우(랙)로 움직여 누리셀을 집는 동작 표현.
-  function poseStackSide(tierY){
+  function poseStackSide(arm, tierY){
     const tY = (tierY != null) ? tierY : TY[1];
-    // 단이 낮을수록(아래) j2를 더 음수로(팔 아래로 처짐), j3로 팔꿈치 펴기
-    const t = (5.13 - tY) / (5.13 - 0.78);   // 0(최상단)~1(최하단)
-    return { j1: Math.PI*.45,
-             j2: -Math.PI*(.42 + t*.30),     // 상단 -.42π ~ 하단 -.72π
-             j3:  Math.PI*(.34 + t*.18),     // 팔꿈치 보정
-             j4: 0, j5: -Math.PI*.15, j6: 0 };
+    return { x: arm.TROLLEY_X, y: tY };   // 우측 랙 정렬 + 해당 단 높이
   }
-  // 기존 호환 (사용 안 함 — 코드 안전성)
-  const POSE_REACH_OUT = POSE_PICK_SIDE;
-  const POSE_REACH_HIGH= POSE_PICK_SIDE;
-  const POSE_HANDOFF   = POSE_DROP_DOWN;
 
   /* Straddle Carrier 상태머신 */
   carriers.forEach(c=>{
@@ -2497,31 +2470,29 @@ function loop(ts){
         });
         c.battery = Math.max(0, c.battery - .015*dt);
       }
-      armLerp(arm, Math.min(1, dt*3), POSE_HOME);
+      gantryMove(arm, Math.min(1, dt*3), POSE_HOME);
     }
-    else if(c.state===1){ // 픽업 (팔 측면 회전 + 작업 단 높이로 상하 → 포크 슬라이드 → 그립 → 복귀)
+    else if(c.state===1){ // 픽업 (트롤리 좌우 + 캐리지 단 높이 → 포크 텔레스코픽 인출 → 그립 → 복귀)
       const phase = c.stateTimer / 5.0;  // 더 천천히, 부드럽게
-      const pickPose = poseStackSide(c.targetTierY);   // 작업 셀 단 높이 반영(상하 이동)
+      const pickPose = poseStackSide(arm, c.targetTierY);   // 작업 셀 단 높이 반영(상하 이동)
       if(phase < .20){
-        // 1) 팔을 랙 측면 + 작업 단 높이로 부드럽게 이동
-        armLerp(arm, Math.min(1, dt*3), pickPose);
+        // 1) 트롤리를 랙 쪽으로 + 캐리지를 작업 단 높이로 부드럽게 이동
+        gantryMove(arm, Math.min(1, dt*3), pickPose);
       }else if(phase < .35){
-        // 2) 포크를 랙 안쪽으로 수평 슬라이드 (포크 X 좌표 증가 = 손끝 앞으로)
+        // 2) 포크 텔레스코픽 인출 (forkGroup X 증가 = 랙 안쪽으로 수평 인입)
         const slideT = (phase-.20)/.15;
-        arm.fork1.position.x = .08 + .275 + slideT * .35;
-        arm.fork2.position.x = .08 + .275 + slideT * .35;
+        arm.forkGroup.position.x = arm.FORK_BASE_X + slideT * .50;
       }else if(phase < .50){
-        // 3) 누리셀 그립 (수평 자세 유지된 채로 페이드인)
+        // 3) 누리셀 그립 (수평 자세 — 직교라 구조적 보장)
         arm.carryDrum.material.opacity = (phase-.35)/.15 * .92;
         arm.carryDrum.material.color.setHex(c.drumColor);
       }else if(phase < .65){
-        // 4) 포크 수평 슬라이드 복귀 (자세는 그대로, 손끝만 후퇴)
+        // 4) 포크 텔레스코픽 후퇴 (누리셀 든 채로 랙에서 빠져나옴)
         const slideT = 1 - (phase-.50)/.15;
-        arm.fork1.position.x = .08 + .275 + slideT * .35;
-        arm.fork2.position.x = .08 + .275 + slideT * .35;
+        arm.forkGroup.position.x = arm.FORK_BASE_X + slideT * .50;
       }else if(phase < 1.0){
-        // 5) 천천히 HOME 자세로 (캐리어 중앙 아래)
-        armLerp(arm, Math.min(1, dt*2.5), POSE_HOME);
+        // 5) 천천히 HOME 자세로 (트롤리 중앙, 캐리지 중간 높이)
+        gantryMove(arm, Math.min(1, dt*2.5), POSE_HOME);
       }else{
         c.carrying = true;
         // 추적: 수확 누리셀을 랙에서 추출(OUT) — 어느 누리셀이 어느 슬롯에서 나갔는지
@@ -2544,7 +2515,7 @@ function loop(ts){
       }
     }
     else if(c.state===5){ // AMR 도착 대기 (캐리어는 정지, 팔은 HOME)
-      armLerp(arm, Math.min(1, dt*4), POSE_HOME);
+      gantryMove(arm, Math.min(1, dt*4), POSE_HOME);
       // 페어 AMR (pickup-out 역할로 이 캐리어 향해 오는 중인 AMR)
       const pairAmr = amrPool.find(a=>a.target===c && a.role==='pickup-out');
       const amrArrived = pairAmr && Math.hypot(pairAmr.x - c.x, pairAmr.z - c.z) < .6;
@@ -2556,16 +2527,33 @@ function loop(ts){
         c.state = 2; c.stateTimer = 0;
       }
     }
-    else if(c.state===2){ // 하역 → 옆 AMR에 수직 하강 인계
+    else if(c.state===2){ // 하역 → 누리셀을 손끝에서 AMR 위로 운반·하역 (픽&플레이스)
       const phase = c.stateTimer / 4.0;
-      if(phase < .35){
-        armLerp(arm, Math.min(1, dt*2.5), POSE_DROP_DOWN);
-      }else if(phase < .55){
-        // 누리셀 릴리스
-        arm.carryDrum.material.opacity = .92 - (phase-.35)/.20 * .92;
+      const pairAmr = amrPool.find(a=>a.target===c && a.role==='pickup-out');
+      const td = arm.transferDrum, tv = _tmpV;
+      if(phase < .30){
+        // 1) 캐리지를 AMR 인계 높이로 하강 (누리셀 든 채)
+        gantryMove(arm, Math.min(1, dt*2.5), POSE_DROP_DOWN);
+      }else if(phase < .70 && pairAmr){
+        // 2) 운반 누리셀이 포크 → AMR heldDrum 위치로 이동 (carryDrum 페이드아웃, transfer 보임)
+        const t = (phase-.30)/.40;
+        arm.carryDrum.getWorldPosition(tv); const sx=tv.x, sy=tv.y, sz=tv.z;
+        pairAmr.vis.heldDrum.getWorldPosition(tv); const ex=tv.x, ey=tv.y, ez=tv.z;
+        // 살짝 포물선(들어올렸다 내림)으로 자연스럽게
+        const arc = Math.sin(t*Math.PI)*0.25;
+        td.position.set(sx+(ex-sx)*t, sy+(ey-sy)*t + arc, sz+(ez-sz)*t);
+        td.material.opacity = .92;
+        td.material.color.setHex(c.drumColor);
+        arm.carryDrum.material.opacity = Math.max(0, .92*(1-t*3));  // 손에서 빠르게 사라짐
+      }else if(phase < .82){
+        // 3) AMR 위에 안착 — transfer 페이드아웃 (AMR heldDrum 페이드인은 AMR state3이 처리)
+        const t = (phase-.70)/.12;
+        td.material.opacity = .92*(1-t);
       }else if(phase < 1.0){
-        armLerp(arm, Math.min(1, dt*2.5), POSE_HOME);
+        td.material.opacity = 0;
+        gantryMove(arm, Math.min(1, dt*2.5), POSE_HOME);
       }else{
+        td.material.opacity = 0;
         c.carrying = false;
         // OUT 인계 완료 — 같은 자리에서 IN 자재 받아서 빈 랙에 적재 (동시 사이클)
         // IN 작업 큐 push
@@ -2579,7 +2567,7 @@ function loop(ts){
       }
     }
     else if(c.state===6){ // IN 자재 수령 대기 (AMR이 IN 누리셀 들고 도착할 때까지)
-      armLerp(arm, Math.min(1, dt*4), POSE_HOME);
+      gantryMove(arm, Math.min(1, dt*4), POSE_HOME);
       const pairAmr = amrPool.find(a=>a.target===c && a.role==='delivery-in');
       const amrArrived = pairAmr && pairAmr.hasDrum && Math.hypot(pairAmr.x - c.x, pairAmr.z - c.z) < .6;
       if(amrArrived){
@@ -2609,33 +2597,47 @@ function loop(ts){
         }
       }
     }
-    else if(c.state===7){ // IN 누리셀 받아서 빈 랙에 적재 (역방향 픽업 시퀀스)
+    else if(c.state===7){ // IN: AMR에서 누리셀 들어 → 빈 랙에 적재 (픽&플레이스 역방향)
       const phase = c.stateTimer / 4.5;
-      if(phase < .25){
-        // 1) 팔을 아래(AMR 위)로 내려서 누리셀 그립
-        armLerp(arm, Math.min(1, dt*2.5), POSE_DROP_DOWN);
-        arm.carryDrum.material.color.setHex(0x4080c0);  // IN 색
-        arm.carryDrum.material.opacity = Math.min(.92, phase/.25 * .92);
+      const inPose = poseStackSide(arm, c.targetTierY);  // 빈 랙 단 높이 반영(상하 이동)
+      const td = arm.transferDrum, tv = _tmpV;
+      const pairAmr = amrPool.find(a=>a.target===c && a.role==='delivery-in');
+      if(phase < .12){
+        // 1) 캐리지를 AMR 인계 높이로 하강 (수령 준비)
+        gantryMove(arm, Math.min(1, dt*2.5), POSE_DROP_DOWN);
+      }else if(phase < .42){
+        // 2) 운반 누리셀이 AMR heldDrum → 포크로 올라옴 (AMR heldDrum 페이드아웃)
+        const t = (phase-.12)/.30;
+        let sx, sy, sz;
+        if(pairAmr){ pairAmr.vis.heldDrum.getWorldPosition(tv); sx=tv.x; sy=tv.y; sz=tv.z;
+                     pairAmr.vis.heldDrum.material.opacity = Math.max(0, .92*(1-t*1.5)); }
+        else { c.vis.robotArm.carryDrum.getWorldPosition(tv); sx=tv.x; sy=tv.y; sz=tv.z; }
+        arm.carryDrum.getWorldPosition(tv); const ex=tv.x, ey=tv.y, ez=tv.z;
+        const arc = Math.sin(t*Math.PI)*0.2;
+        td.position.set(sx+(ex-sx)*t, sy+(ey-sy)*t + arc, sz+(ez-sz)*t);
+        td.material.opacity = .92; td.material.color.setHex(0x4080c0);  // IN 색
       }else if(phase < .50){
-        // 2) HOME 자세로 들어올림
-        armLerp(arm, Math.min(1, dt*2.5), POSE_HOME);
+        // 3) 포크에 안착 → transfer 페이드아웃, carryDrum 페이드인 (포크가 쥠)
+        const t = (phase-.42)/.08;
+        td.material.opacity = .92*(1-t);
+        arm.carryDrum.material.color.setHex(0x4080c0);
+        arm.carryDrum.material.opacity = .92*t;
       }else if(phase < .70){
-        // 3) 옆 랙으로 회전
-        armLerp(arm, Math.min(1, dt*3), POSE_PICK_SIDE);
+        // 4) 빈 랙 단 높이로 갠트리 이동 (트롤리 랙 쪽 + 캐리지 단 높이)
+        td.material.opacity = 0;
+        gantryMove(arm, Math.min(1, dt*3), inPose);
       }else if(phase < .85){
-        // 4) 포크 슬라이드 진입 (빈 랙에 누리셀 넣기)
+        // 5) 포크 텔레스코픽 인출 (빈 랙에 누리셀 넣기)
         const slideT = (phase-.70)/.15;
-        arm.fork1.position.x = .08 + .275 + slideT * .35;
-        arm.fork2.position.x = .08 + .275 + slideT * .35;
+        arm.forkGroup.position.x = arm.FORK_BASE_X + slideT * .50;
       }else if(phase < .92){
-        // 5) 누리셀 릴리스 (랙에 놓음)
+        // 6) 누리셀 릴리스 (랙에 놓음)
         arm.carryDrum.material.opacity = .92 - (phase-.85)/.07 * .92;
       }else if(phase < 1.0){
-        // 6) 포크 후퇴 + HOME 복귀
+        // 7) 포크 후퇴 + HOME 복귀
         const slideT = 1 - (phase-.92)/.08;
-        arm.fork1.position.x = .08 + .275 + slideT * .35;
-        arm.fork2.position.x = .08 + .275 + slideT * .35;
-        armLerp(arm, Math.min(1, dt*3), POSE_HOME);
+        arm.forkGroup.position.x = arm.FORK_BASE_X + slideT * .50;
+        gantryMove(arm, Math.min(1, dt*3), POSE_HOME);
       }else{
         // 사이클 완료
         // 추적: 새 자재 누리셀을 빈 슬롯에 식재(IN) — 새 고유번호 발급
@@ -2686,7 +2688,7 @@ function loop(ts){
       // 위치 고정 (homeX, homeZ로 수렴)
       c.x += (c.homeX - c.x) * Math.min(1, dt*4);
       c.z += (c.homeZ - c.z) * Math.min(1, dt*4);
-      armLerp(arm, Math.min(1, dt*4), POSE_HOME);
+      gantryMove(arm, Math.min(1, dt*4), POSE_HOME);
       // 3대 교대 가동: 가동 중인 캐리어가 2대 미만이면 충전 완료된 예비가 출동
       //   (다른 캐리어가 배터리 부족으로 충전 들어가면 예비가 빈자리 메움)
       const isActive = s => (s>=0 && s<=2) || s===5 || s===6 || s===7;  // 가동 상태(충전4·대기3 제외)
@@ -2701,19 +2703,9 @@ function loop(ts){
     // 위치 반영
     v.grp.position.set(c.x, 0, c.z);
 
-    // 누리셀 자세 강제 수평 유지 (월드 좌표계 기준)
-    // 누리셀은 안의 식물 보호를 위해 어떤 자세에서도 수직축이 흐트러지면 안 됨
-    // j6 부모의 월드 회전을 역보상하여 carryDrum이 월드에서 항상 수평 유지
-    if(arm && arm.carryDrum && arm.j6){
-      // 부모(j6)의 월드 quaternion 계산
-      arm.j6.updateMatrixWorld(true);
-      const parentWorldQ = new THREE.Quaternion();
-      arm.j6.getWorldQuaternion(parentWorldQ);
-      // 원하는 월드 자세: rotation.z = PI/2 (원통이 X축 따라 누움)
-      const desiredWorldQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI/2));
-      // 로컬 quaternion = parentInverse * desiredWorld
-      arm.carryDrum.quaternion.copy(parentWorldQ).invert().multiply(desiredWorldQ);
-    }
+    // 누리셀 수평 유지는 직교 갠트리에서 구조적으로 보장됨
+    //   (트롤리·캐리지·포크 전부 순수 병진 = 무회전 → carryDrum의 초기 rotation.z=PI/2 유지)
+    //   6축 시절 손목 역보상 로직 불필요해 제거.
 
     // 경고등 깜빡임
     const blink = (Math.sin(t0*.008) + 1) * .5;
@@ -3059,7 +3051,7 @@ document.getElementById('amrl').innerHTML=[
 ].join('<br>');
 
 const msgs=[
-  '● C-01 6축 로봇암 → 2동 R2 3단 누리셀 픽업중',
+  '● C-01 직교 갠트리 → 2동 R2 3단 누리셀 픽업중',
   '● C-02 누리셀 인계 → AMR-OUT → OUT 컨베이어 이송',
   '● C-03 예비 충전중 · 96% (트리클 충전 유지)',
   '● AMR-IN 자재 공급 → C-01 작업공간 도착',
