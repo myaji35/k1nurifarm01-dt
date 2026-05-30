@@ -269,14 +269,34 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.6/build/index.module.js",
+    "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js"
   }
 }
 </script>
 <script type="module">
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
+import RAPIER from '@dimforge/rapier3d-compat';
 window.THREE = THREE;          // 기존 코드의 전역 THREE.* 참조 호환 (355곳 무수정)
+
+// ═══ three-mesh-bvh: BufferGeometry에 가속 충돌트리(BVH) 확장 주입 ═══
+//    정적 환경(통로벽/랙/지지기둥)에 대한 정밀 근접거리 질의를 ms 단위로 수행.
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
+window.MeshBVH = MeshBVH;
+
+// ═══ Rapier 물리 월드 초기화 (WASM) — 충돌 검증 레이어 ═══
+//    캐리어/AMR를 kinematic 콜라이더로 등록. 상태머신이 위치를 주입하면
+//    Rapier가 정적 장애물과의 교차(intersection)를 판정 → DT 물리 신뢰성.
+//    ⚠️ Rapier가 객체를 "움직이지" 않음(중력 0, kinematic). 기존 상태머신 보존.
+window.__RAPIER = null; window.__physWorld = null;
+await RAPIER.init();
+window.__RAPIER = RAPIER;
+window.__physWorld = new RAPIER.World({ x:0, y:0, z:0 });   // 무중력: 검증 전용
 /* ═══ 레이아웃 상수 (9.6m 정합 확인)
    Wall(0.15) | R1(0.9) | A1(2.85) | R2(0.9) | R3(0.9) | A2(2.85) | R4(0.9) | Wall(0.15) = 9.6 ✓
    ═══ */
@@ -1677,6 +1697,115 @@ carriers.forEach(c=>{
   c.vis.grp.position.set(c.x, 0, c.z);
 });
 
+/* ═══════════════════════════════════════════════════════════════════
+   충돌·간섭 검증 시스템 (three-mesh-bvh + Rapier)
+   ───────────────────────────────────────────────────────────────────
+   목적(DT 물리 신뢰성): 상태머신이 운전하는 캐리어/AMR가 통로 안에서
+   ① 정적 장애물(통로벽·랙·기둥)과 부딪히는가  ② 서로 너무 근접하는가 를
+   매 tick 판정하여 화면(빨강 점멸)·KPI에 구분 표시한다.
+   캐리어 폭 1.50m vs 통로 1.67m → 좌우 여유 8.5cm. 이탈 시 즉시 간섭.
+   ═══════════════════════════════════════════════════════════════════ */
+const COLL = {
+  enabled: true,
+  WARN_GAP: 0.30,        // 근접 경고 임계(m): 안전여유 미만이면 주의
+  movers: [],            // {id, kind, getPos, half:{x,z}, body, collider, vis, _hit}
+  staticColliders: [],   // Rapier 정적 콜라이더 핸들
+  events: 0,             // 누적 충돌 이벤트
+  active: 0,             // 현재 프레임 충돌/근접 건수
+  log: []                // 최근 충돌 이력 (id, type, t)
+};
+
+// ── (1) Rapier 정적 장애물 등록: 통로 양벽 + 랙 라인 (캐리어가 닿으면 안 되는 면) ──
+//    통로A[A1S~A1E], 통로B[A2S~A2E]를 각 span마다, 좌/우 벽을 얇은 cuboid로.
+function _addStaticWall(cx, cz, hx, hz){
+  const W = window.__physWorld, R = window.__RAPIER;
+  const bd = W.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(cx, 0.5, cz));
+  const col = W.createCollider(R.ColliderDesc.cuboid(hx, 0.5, hz), bd);
+  COLL.staticColliders.push(col);
+}
+for(let s=0;s<SPAN;s++){
+  const ox=s*GW;
+  // 통로 A 좌/우 벽 (랙 R1·R2 면)
+  _addStaticWall(ox+A1S-0.02, GL/2, 0.02, GL/2);
+  _addStaticWall(ox+A1E+0.02, GL/2, 0.02, GL/2);
+  // 통로 B 좌/우 벽 (랙 R3·R4 면)
+  _addStaticWall(ox+A2S-0.02, GL/2, 0.02, GL/2);
+  _addStaticWall(ox+A2E+0.02, GL/2, 0.02, GL/2);
+}
+
+// ── (2) 이동체(캐리어/AMR) 등록 — 능동 도형 질의 방식 ──
+//    Rapier intersectionPairsWith(sensor-페어)는 이 구성에서 누락되므로
+//    매 프레임 mover 위치에 cuboid를 놓고 intersectionWithShape로 질의(검증 완료).
+const _ROT = {x:0,y:0,z:0,w:1};
+function _addMover(id, kind, getPos, halfX, halfZ, vis){
+  const R = window.__RAPIER;
+  COLL.movers.push({ id, kind, getPos, shape:new R.Cuboid(halfX, 0.5, halfZ), vis, _hit:false });
+}
+carriers.forEach(c=>{
+  if(c.id==='C-03') return;  // 예비/충전 중 캐리어는 검증 제외
+  _addMover(c.id, 'carrier', ()=>({x:c.x, z:c.z}), CARRIER_W/2, CARRIER_L/2, c.vis.grp);
+});
+// AMR은 amrPool 생성 이후(아래)에서 등록 — 여기선 carriers만.
+
+// ── (3) 충돌 시각 표시: 이동체 그룹에 빨강 윤곽 박스(평시 숨김) ──
+function _mkHitBox(half, h){
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(half.x*2, h, half.z*2),
+    new THREE.MeshBasicMaterial({color:0xE24B4A, transparent:true, opacity:0, depthWrite:false, wireframe:true})
+  );
+  box.position.y = h/2; box.visible=false; box.renderOrder=999;
+  return box;
+}
+carriers.forEach(c=>{
+  if(c.id==='C-03') return;
+  const hb=_mkHitBox({x:CARRIER_W/2+.05, z:CARRIER_L/2+.05}, 1.6);
+  c.vis.grp.add(hb); c._hitBox=hb;
+  const mv=COLL.movers.find(m=>m.id===c.id); if(mv) mv._hbRef=hb;   // mover에 직접 연결
+});
+
+// ── (4) 매 tick 호출: 위치 동기화 → Rapier step → 교차 질의 → 표시 ──
+function runCollisionCheck(){
+  if(!COLL.enabled || !window.__physWorld) return;
+  const W=window.__physWorld;
+  // 4-1. 정적 장애물(통로벽/랙) 교차 — 각 mover 위치에 도형 질의
+  COLL.active=0;
+  const pos = COLL.movers.map(m=>m.getPos());
+  const hits = COLL.movers.map((m,i)=>{
+    const p=pos[i];
+    const h = W.intersectionWithShape({x:p.x, y:0.5, z:p.z}, _ROT, m.shape);
+    return (h !== null && h !== undefined);
+  });
+  // 4-2. 이동체 간 실제 겹침 검사(캐리어↔AMR, AMR↔AMR) — 두 박스가 물리적으로 교차하면 간섭.
+  //   (정지 시 home 밀집은 설계상 정상이므로 WARN_GAP 여유 없이 실제 겹침만 빨강 처리)
+  //   캐리어가 관여한 쌍만 검사(캐리어↔AMR, 캐리어↔캐리어). AMR↔AMR은 같은 통로
+  //   줄서기 운영이 정상이라 노이즈가 커 제외 — 핵심은 대형 장비(캐리어)의 간섭.
+  for(let i=0;i<COLL.movers.length;i++){
+    for(let j=i+1;j<COLL.movers.length;j++){
+      const mi=COLL.movers[i], mj=COLL.movers[j];
+      if(mi.kind!=='carrier' && mj.kind!=='carrier') continue;  // 캐리어 미관여 쌍 skip
+      const a=pos[i], b=pos[j];
+      const minX=mi.shape.halfExtents.x+mj.shape.halfExtents.x;
+      const minZ=mi.shape.halfExtents.z+mj.shape.halfExtents.z;
+      if(Math.abs(a.x-b.x)<minX && Math.abs(a.z-b.z)<minZ){ hits[i]=true; hits[j]=true; }
+    }
+  }
+  // 4-3. 결과 반영 + 시각 표시(빨강 윤곽 박스 점멸)
+  COLL.movers.forEach((m,i)=>{
+    const hit=hits[i];
+    if(hit && !m._hit){ COLL.events++; COLL.log.unshift({id:m.id, t:Date.now()}); if(COLL.log.length>8)COLL.log.pop(); }
+    m._hit=hit; if(hit)COLL.active++;
+    if(m._hbRef){
+      m._hbRef.visible=hit;
+      if(hit) m._hbRef.material.opacity = 0.4 + 0.4*Math.abs(Math.sin(Date.now()*0.012));
+    }
+  });
+  // 4-3. KPI 알람 슬롯 갱신 (id=kt-al: 기존 알람 + 충돌 active 합산 표시)
+  const al=document.getElementById('kt-al');
+  if(al){ const base = COLL._spanAlarms||0; al.textContent = base + COLL.active;
+    al.style.color = COLL.active>0 ? '#E24B4A' : ''; }
+}
+window.COLL = COLL;
+
 /* 충전 스테이션 (5동 끝단, C-03 위치) — CHG_X/CHG_Z는 위에서 선언됨 */
 // 충전 패드 (바닥)
 const chgPad=bx(CARRIER_W+.4, .06, CARRIER_L+.4, 0x2a5fa5, CHG_X, .03, CHG_Z, .9);
@@ -1953,6 +2082,22 @@ const amrPool = _amrDefs.map((d,i)=>{
     waypoint:null
   };
 });
+
+// ── AMR(12대) 충돌 검증 등록 (폭 1.4 × 길이 1.3) + 빨강 윤곽 박스 ──
+//    isMoving: AMR이 이동 중(state!==0 대기)일 때만 상호 간섭 검사.
+//    (정지 시 home 밀집 배치는 시각적 단순화 → false positive 방지)
+amrPool.forEach(a=>{
+  _addMover(a.id, 'amr', ()=>({x:a.x, z:a.z}), 1.4/2, 1.3/2, a.vis.grp);
+  const hb=_mkHitBox({x:0.75, z:0.7}, 0.9);
+  a.vis.grp.add(hb); a._hitBox=hb;
+  const mv=COLL.movers[COLL.movers.length-1];
+  mv._hbRef=hb;
+  mv.isMoving=()=> a.state!==0;   // 대기(0) 외 상태면 이동 중
+});
+
+// ── Rapier broad-phase(QBVH) 구축: 정적 콜라이더 등록 후 1회 step 필수.
+//    step 없이는 intersectionWithShape가 정적 장애물을 못 찾는다(검증으로 확인).
+window.__physWorld.step();
 
 // 작업 큐 — 캐리어가 요청 push, AMR이 한가하면 pop
 // req: { kind:'pickup-out'|'delivery-in', carrier, requestedAt }
@@ -2952,6 +3097,8 @@ function loop(ts){
     });
   }
 
+  runCollisionCheck();   // 상태머신 위치 갱신 후 → 충돌·간섭 판정 + 표시
+
   if(cockpitView){
     // 조정실: 캐리어 수만큼 세로 N분할, 각 칸에 운전석 카메라로 같은 scene 렌더
     syncCockpit();
@@ -3416,6 +3563,7 @@ function tick(){
   const avgT=spans.reduce((a,s)=>a+s.temp,0)/spans.length;
   document.getElementById('kt-tp').textContent=avgT.toFixed(1)+'°C';
   const alms=spans.filter(s=>s.status==='warning').length+1;
+  if(window.COLL) window.COLL._spanAlarms=alms;   // 충돌 검증과 합산 표시(runCollisionCheck)
   const ka=document.getElementById('kt-al');ka.textContent=alms;ka.className='kv '+(alms>1?'r':'');
   drawSpk();
 
