@@ -263,8 +263,20 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   <div id="tkw"><div id="tk"></div></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
+<!-- ═══ three.js 모듈화 (정공법): r128 단일 min.js → importmap + ESM (r0.160)
+     전역 THREE 유지(기존 355개 참조 무수정) + examples/jsm 사용 가능(IBL/RoomEnvironment) ═══ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+window.THREE = THREE;          // 기존 코드의 전역 THREE.* 참조 호환 (355곳 무수정)
 /* ═══ 레이아웃 상수 (9.6m 정합 확인)
    Wall(0.15) | R1(0.9) | A1(2.85) | R2(0.9) | R3(0.9) | A2(2.85) | R4(0.9) | Wall(0.15) = 9.6 ✓
    ═══ */
@@ -336,7 +348,16 @@ const ren=new THREE.WebGLRenderer({antialias:true});
 ren.setPixelRatio(Math.min(devicePixelRatio,2));
 ren.setSize(ctr.clientWidth,ctr.clientHeight);
 ren.shadowMap.enabled=true;
+ren.shadowMap.type=THREE.PCFSoftShadowMap;            // ④ 부드러운 그림자 (경계 자연화)
+ren.toneMapping=THREE.ACESFilmicToneMapping;          // ② 필름 톤매핑 (색감/하이라이트 정돈)
+ren.toneMappingExposure=1.1;
+ren.outputColorSpace=THREE.SRGBColorSpace;            // ② sRGB 출력 (색공간 정합)
 ctr.appendChild(ren.domElement);
+
+// ① 환경맵(IBL) — RoomEnvironment를 PMREM으로 prefilter → scene.environment.
+//    PBR(MeshStandardMaterial) 표면에 주변광 반사를 부여해 금속/플라스틱 질감을 살린다.
+const _pmrem=new THREE.PMREMGenerator(ren);
+scene.environment=_pmrem.fromScene(new RoomEnvironment(),0.04).texture;
 
 scene.add(new THREE.AmbientLight(0xffffff,.52));
 const sun=new THREE.DirectionalLight(0xfff0dd,1.05);
@@ -352,8 +373,11 @@ const fill2=new THREE.HemisphereLight(0xbfe8ff,0x18303a,.30);
 scene.add(fill2);
 
 function bx(w,h,d,col,x,y,z,op=1){
+  // ③ PBR 전환: Lambert→Standard. 구조물(바닥/하우스/프레임/복도)에 metalness·roughness 부여
+  //    → scene.environment(IBL) 반사를 받아 평면적 느낌 제거. 약한 금속성(.15)/중간 거칠기(.7).
   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),
-    new THREE.MeshLambertMaterial({color:col,transparent:op<1,opacity:op,depthWrite:op>.45}));
+    new THREE.MeshStandardMaterial({color:col,metalness:.15,roughness:.7,
+      transparent:op<1,opacity:op,depthWrite:op>.45}));
   m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
 }
 function eg(w,h,d,col,x,y,z,op=1){
@@ -496,9 +520,11 @@ for(let si=0;si<SPAN;si++){
 /* ── 드럼 InstancedMesh ── */
 const dgeo=new THREE.CylinderGeometry(DR,DR,DW,14);
 const bgeo=new THREE.CylinderGeometry(DR*.86,DR*.86,DW*1.01,14);
-const inst=new THREE.InstancedMesh(dgeo,new THREE.MeshLambertMaterial(),NDRUM);
+// ③ PBR 전환: 누리셀 드럼 3,040개(InstancedMesh) — 살짝 광택 있는 재배통 질감.
+//    setColorAt(발육단계 4색)는 Standard에서도 동일 동작.
+const inst=new THREE.InstancedMesh(dgeo,new THREE.MeshStandardMaterial({metalness:.2,roughness:.55}),NDRUM);
 inst.castShadow=true;
-const bore=new THREE.InstancedMesh(bgeo,new THREE.MeshLambertMaterial({color:0x02060a}),NDRUM);
+const bore=new THREE.InstancedMesh(bgeo,new THREE.MeshStandardMaterial({color:0x02060a,metalness:.1,roughness:.9}),NDRUM);
 /* 발육 단계 4컬러
    stage 0 시드(0~7일)     #e8e0c8 (연백색)
    stage 1 성장(8~21일)    #5DCAA5 (연두색)
