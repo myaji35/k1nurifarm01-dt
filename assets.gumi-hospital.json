@@ -1,0 +1,27 @@
+{
+  "_comment": "구미병원 DT 자산 시제품 — 같은 smartfarm_dt_monitor_v04.html 엔진에 끼우는 도메인 교체 증명. 작물→병동 구역, 캐리어→이송로봇으로 치환. 사용: assets.json을 이 파일로 교체(또는 ?assets= 파라미터화).",
+  "site": {
+    "id": "gumi-hospital",
+    "name": "구미병원 DT",
+    "spanCount": 5
+  },
+  "dimensions": {
+    "GW": 9.6,
+    "GL": 50,
+    "GH": 6
+  },
+  "crops": {
+    "icu":  { "name": "중환자실", "icon": "🫀", "tTar": [22, 24], "hTar": 55, "ecTar": 1.5, "color": 16734296, "shade": "high" },
+    "ward": { "name": "일반병동", "icon": "🛏️", "tTar": [23, 26], "hTar": 50, "ecTar": 1.2, "color": 4945407,  "shade": "mid"  },
+    "or":   { "name": "수술실",   "icon": "🔪", "tTar": [20, 22], "hTar": 55, "ecTar": 1.4, "color": 5025616,  "shade": "low"  }
+  },
+  "spanCrops": ["icu", "ward", "or", "ward", "ward"],
+  "carriers": [
+    { "id": "C-01", "zone": "중환자·약품 이송", "battery": 78, "drumColor": 4945407,  "zoneSpan": [0, 1, 2], "aisle": 0, "spawn": "A1" },
+    { "id": "C-02", "zone": "병동·검체 이송",   "battery": 64, "drumColor": 16734296, "zoneSpan": [2, 3, 4], "aisle": 1, "spawn": "A2" },
+    { "id": "C-03", "zone": "예비 (충전 중)",   "battery": 96, "drumColor": 5025616,  "zoneSpan": [4], "aisle": 1, "spawn": "CHG" }
+  ],
+  "amrConfig": {
+    "perCarrier": { "in": 3, "out": 1 }
+  }
+}

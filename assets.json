@@ -1,0 +1,27 @@
+{
+  "_comment": "DT 자산 정의 — 도메인 교체 시 이 파일만 바꾼다. 좌표 계산식·3D 생성·상태머신은 HTML 코드에 유지(2계층 분리). 구미병원/데이터센터 확장 시 이 파일을 복제·치환.",
+  "site": {
+    "id": "k1nurifarm01",
+    "name": "k1NuriFarm01 DT",
+    "spanCount": 5
+  },
+  "dimensions": {
+    "GW": 9.6,
+    "GL": 50,
+    "GH": 6
+  },
+  "crops": {
+    "leaf": { "name": "엽채류", "icon": "🥬", "tTar": [18, 20], "hTar": 70, "ecTar": 1.8, "color": 7266410, "shade": "low" },
+    "herb": { "name": "허브류", "icon": "🌿", "tTar": [20, 24], "hTar": 58, "ecTar": 1.6, "color": 9097288, "shade": "mid" },
+    "cica": { "name": "병풀",   "icon": "☘️", "tTar": [22, 26], "hTar": 75, "ecTar": 2.0, "color": 3844714, "shade": "high" }
+  },
+  "spanCrops": ["leaf", "herb", "cica", "cica", "cica"],
+  "carriers": [
+    { "id": "C-01", "zone": "1·2·3동", "battery": 78, "drumColor": 16747056, "zoneSpan": [0, 1, 2], "aisle": 0, "spawn": "A1" },
+    { "id": "C-02", "zone": "3·4·5동", "battery": 64, "drumColor": 16736288, "zoneSpan": [2, 3, 4], "aisle": 1, "spawn": "A2" },
+    { "id": "C-03", "zone": "예비 (충전 중)", "battery": 96, "drumColor": 16747056, "zoneSpan": [4], "aisle": 1, "spawn": "CHG" }
+  ],
+  "amrConfig": {
+    "perCarrier": { "in": 3, "out": 1 }
+  }
+}

@@ -117,8 +117,99 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 #autoBanner{display:none;align-items:center;gap:6px;margin-left:10px;font-size:10px;color:#7ae0c8;background:rgba(46,196,182,.12);border:1px solid rgba(46,196,182,.35);border-radius:4px;padding:3px 9px;white-space:nowrap}
 #autoBanner .dot{width:6px;height:6px;border-radius:50%;background:#7ae0c8;animation:bl 1.2s infinite}
 </style>
+<style>
+/* ═══ AI 코파일럿 NPC UI (accent #2ec4b6, bg #0d1622 — 기존 팔레트 준수) ═══ */
+#copilot{position:fixed;right:18px;bottom:18px;z-index:60;font-family:'Segoe UI','Malgun Gothic',sans-serif}
+#cpToggle{width:52px;height:52px;border-radius:50%;border:1px solid rgba(46,196,182,.5);
+  background:#0d1622;color:#2ec4b6;font-size:24px;cursor:pointer;
+  box-shadow:0 4px 18px rgba(0,0,0,.5),0 0 0 0 rgba(46,196,182,.5);transition:box-shadow .3s;display:flex;align-items:center;justify-content:center}
+#cpToggle:hover{box-shadow:0 4px 22px rgba(0,0,0,.6),0 0 16px rgba(46,196,182,.45)}
+#cpToggle.alert{animation:cpPulse 1.1s infinite}
+@keyframes cpPulse{0%{box-shadow:0 0 0 0 rgba(230,90,90,.6)}70%{box-shadow:0 0 0 14px rgba(230,90,90,0)}100%{box-shadow:0 0 0 0 rgba(230,90,90,0)}}
+#cpPanel{display:none;position:absolute;right:0;bottom:62px;width:330px;max-height:62vh;
+  background:rgba(13,22,34,.97);border:1px solid rgba(46,196,182,.35);border-radius:12px;
+  box-shadow:0 10px 40px rgba(0,0,0,.6);overflow:hidden;flex-direction:column}
+#copilot.open #cpPanel{display:flex}
+#copilot.open #cpToggle{box-shadow:0 0 18px rgba(46,196,182,.5)}
+#cpHead{display:flex;align-items:center;gap:8px;padding:9px 11px;background:rgba(16,28,42,.97);
+  border-bottom:1px solid rgba(46,196,182,.25)}
+#cpName{font-size:12.5px;font-weight:600;color:#d4ece6;flex:1}
+#cpStatus{font-size:10px;padding:2px 7px;border-radius:8px;background:rgba(46,196,182,.14);color:#2ec4b6}
+#cpStatus.live{background:rgba(120,224,160,.16);color:#7ee0a0}
+#cpStatus.dim{opacity:.7}
+#cpHead button{background:none;border:none;color:#9fc3ba;cursor:pointer;font-size:14px;padding:2px 4px;border-radius:6px}
+#cpHead button:hover{background:rgba(46,196,182,.15);color:#2ec4b6}
+#cpMic.rec{color:#e65a5a;animation:cpPulse 1s infinite}
+#cpLog{flex:1;overflow-y:auto;padding:11px;display:flex;flex-direction:column;gap:9px;min-height:140px;max-height:42vh}
+.cpMsg{font-size:12.5px;line-height:1.5;padding:8px 11px;border-radius:10px;max-width:86%;word-break:break-word}
+.cpMsg.user{align-self:flex-end;background:rgba(46,196,182,.16);color:#d4ece6;border-bottom-right-radius:3px}
+.cpMsg.ai{align-self:flex-start;background:rgba(255,255,255,.05);color:#cfe6df;border-bottom-left-radius:3px}
+.cpMsg.sys{align-self:center;font-size:10.5px;color:#7e9a92;background:none;padding:2px}
+.cpMsg .act{display:block;margin-top:4px;font-size:10.5px;color:#2ec4b6}
+#cpInput{display:flex;gap:6px;padding:9px;border-top:1px solid rgba(46,196,182,.2)}
+#cpText{flex:1;background:rgba(1,4,10,.6);border:1px solid rgba(46,196,182,.3);border-radius:8px;
+  color:#d4ece6;padding:8px 10px;font-size:12.5px;outline:none}
+#cpText:focus{border-color:rgba(46,196,182,.6)}
+#cpSend{background:#2ec4b6;border:none;color:#06231f;width:38px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700}
+#cpSend:hover{background:#3fd6c8}
+#cpHint{font-size:10px;color:#6f8a82;text-align:center;padding:0 9px 8px;cursor:pointer}
+#cpHint:hover{color:#2ec4b6;text-decoration:underline}
+/* ═══ 물리 검증 엔진 패널 (좌하단) ═══ */
+#pvPanel{position:fixed;left:236px;bottom:16px;z-index:55;width:248px;
+  background:rgba(13,22,34,.96);border:1px solid rgba(46,196,182,.3);border-radius:10px;
+  font-family:'Segoe UI','Malgun Gothic',sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.5);overflow:hidden}
+#pvPanel.alert{border-color:rgba(226,75,74,.6)}
+#pvHead{display:flex;align-items:center;gap:7px;padding:8px 10px;cursor:pointer;font-size:12px;font-weight:600;color:#d4ece6;
+  background:rgba(16,28,42,.97);border-bottom:1px solid rgba(46,196,182,.2)}
+#pvDot{width:8px;height:8px;border-radius:50%;background:#1d9e75;flex-shrink:0}
+#pvPanel.alert #pvDot{background:#E24B4A;animation:cpPulse 1.1s infinite}
+#pvBadge{margin-left:auto;font-size:11px;min-width:18px;text-align:center;padding:1px 6px;border-radius:8px;
+  background:rgba(46,196,182,.16);color:#2ec4b6;font-weight:700}
+#pvPanel.alert #pvBadge{background:rgba(226,75,74,.2);color:#ff7a78}
+#pvFold{background:none;border:none;color:#9fc3ba;cursor:pointer;font-size:12px;padding:0 2px}
+#pvBody{padding:8px 10px;max-height:34vh;overflow-y:auto}
+#pvPanel.folded #pvBody{display:none}
+#pvCounts{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+.pvGrp{border-left:2px solid rgba(46,196,182,.25);padding-left:6px}
+.pvGrp.on{border-left-color:#E24B4A}
+.pvGh{font-size:10px;color:#6f8a82;margin-bottom:3px;letter-spacing:.02em}
+.pvGrp.on .pvGh{color:#ff7a78}
+.pvGh b{color:#ff7a78}
+.pvGc{display:flex;flex-wrap:wrap;gap:3px}
+.pvc{font-size:9.5px;padding:1px 5px;border-radius:6px;background:rgba(255,255,255,.05);color:#7e9a92}
+.pvc.on{background:rgba(226,75,74,.18);color:#ff7a78;font-weight:600}
+.pvIssH{font-size:10.5px;font-weight:600;color:#ff7a78;margin:4px 0 3px;padding-top:5px;border-top:1px solid rgba(226,75,74,.25)}
+.pvIss{font-size:11px;color:#ffd0cf;padding:3px 0;line-height:1.4}
+.pvIss b{color:#ff9a98}
+.pvFcH{font-size:10.5px;font-weight:600;color:#e0b020;margin:4px 0 3px;padding-top:5px;border-top:1px solid rgba(224,176,32,.3)}
+.pvFc{font-size:11px;color:#f0dca0;padding:3px 0;line-height:1.4}
+.pvFc b{color:#e0b020}
+.pvRow{font-size:11px;color:#cfe6df;padding:4px 0;border-top:1px solid rgba(46,196,182,.1);line-height:1.4}
+.pvRow b{color:#2ec4b6}
+.pvDet{display:block;font-size:10px;color:#7e9a92}
+.pvEmpty{font-size:11px;color:#6f8a82;padding:4px 0}
+</style>
 </head>
 <body>
+<!-- ═══ AI 음성 운영 코파일럿 (NPC) — 게임 데모식 음성 대화+씬 리드. 단일 HTML 유지, 무설치 ═══ -->
+<div id="copilot" aria-live="polite">
+  <button id="cpToggle" title="AI 코파일럿 (Alt+C)">🤖</button>
+  <div id="cpPanel">
+    <div id="cpHead">
+      <span id="cpName">누리 · AI 운영 코파일럿</span>
+      <span id="cpStatus" class="dim">mock</span>
+      <button id="cpBell" title="선제 알림 켜기/끄기">🔔</button>
+      <button id="cpMic" title="음성으로 말하기">🎙️</button>
+      <button id="cpClose" title="닫기">✕</button>
+    </div>
+    <div id="cpLog"></div>
+    <div id="cpInput">
+      <input id="cpText" type="text" placeholder="예: 이상 있는 동 보여줘 / 3동으로 가줘" autocomplete="off">
+      <button id="cpSend">➤</button>
+    </div>
+    <div id="cpHint">🔑 클릭 — Claude(두뇌) + Qwen TTS(음성) 키 입력 · 없으면 mock·기본음성</div>
+  </div>
+</div>
 <div id="tabs">
   <button class="tab active" data-view="cell"     onclick="setView('cell')">🌱 누리셀</button>
   <button class="tab"        data-view="hw"       onclick="setView('hw')">🖧 HW</button>
@@ -203,6 +294,18 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   </div>
   <div id="ctr"><div id="cockpitHud"></div></div>
   <div id="rp">
+    <!-- 통로폭 충돌 검증 모드 (DT 물리 검증) -->
+    <div class="ptit env-only" style="color:#5ee0e8;margin-top:0">🛣️ 통로폭 안전성 검증</div>
+    <div class="env-only" style="font-size:10px;color:#7090a0;margin-bottom:6px">
+      캐리어 폭 1.50m · 통로 전 구간 주행 시 벽 클리어런스 분석
+    </div>
+    <div class="env-only" id="aisleBtns" style="display:flex;gap:4px;margin-bottom:8px">
+      <button class="aisleBtn" data-w="1.50" style="flex:1;padding:5px 0;font-size:11px;background:#0a1828;color:#8fb0a4;border:1px solid #1d3a4a;border-radius:4px;cursor:pointer">1.50m</button>
+      <button class="aisleBtn active" data-w="1.67" style="flex:1;padding:5px 0;font-size:11px;background:#0a3a34;color:#5ee0e8;border:1px solid #2a6a5a;border-radius:4px;cursor:pointer">1.67m</button>
+      <button class="aisleBtn" data-w="1.80" style="flex:1;padding:5px 0;font-size:11px;background:#0a1828;color:#8fb0a4;border:1px solid #1d3a4a;border-radius:4px;cursor:pointer">1.80m</button>
+    </div>
+    <div class="env-only" id="aisleResult" style="font-size:11px;line-height:1.7;color:#8fb0a4;margin-bottom:10px"></div>
+
     <div class="ptit env-only">환경 센서 (실시간)</div>
     <table class="stbl env-only"><thead><tr><th>동</th><th>기온</th><th>습도</th><th>EC</th><th>pH</th></tr></thead><tbody id="stb"></tbody></table>
     <div class="ptit env-only">기온 추이</div>
@@ -271,16 +374,60 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
     "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
     "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.6/build/index.module.js",
-    "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js"
+    "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js",
+    "mqtt": "https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.esm.js"
   }
 }
 </script>
 <script type="module">
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import RAPIER from '@dimforge/rapier3d-compat';
+import mqtt from 'mqtt';
 window.THREE = THREE;          // 기존 코드의 전역 THREE.* 참조 호환 (355곳 무수정)
+
+// ═══ 자산 정의 로드 (2계층 분리): 도메인 가변값만 외부 JSON. 좌표 계산식은 코드 유지. ═══
+//    구미병원/데이터센터 확장 시 assets.json만 교체. top-level await (RAPIER.init과 동일 패턴).
+//   ?assets=<file> 파라미터로 도메인 자산 교체 (기본 assets.json). 예: ?assets=assets.gumi-hospital.json
+const _assetsFile = new URLSearchParams(location.search).get('assets') || 'assets.json';
+const ASSETS = await fetch(_assetsFile).then(r=>r.json());
+
+// ═══ 실데이터 연동 PoC — MQTT over WebSocket (단방향 mock → 양방향 트윈) ═══
+//   동별 센서값을 MQTT 토픽으로 구독. 외부 실센서가 같은 토픽으로 publish하면 그대로 반영.
+//   PoC 단계: 공개 브로커에 우리가 가짜 센서를 publish → 같은 페이지가 subscribe해 실시간 루프 증명.
+//   수신값은 window._mqttSensors[동id]에 저장 → tick()이 mock보다 우선 사용(없으면 mock fallback).
+window._mqttSensors = {};          // { [spanId]: {temp,hum,ec,ph, _ts} }
+window._mqttState = 'connecting';  // connecting | live | offline
+//   로컬 인증 브로커(Mosquitto, WebSocket 9001 + viewer 계정). 운영 전환 시 URL/계정만 교체.
+//   브로커 미기동 시 자동으로 mock fallback(tick의 _dataSrc 분기) — 화면 안 죽음.
+const MQTT_BROKER = 'ws://localhost:9001';
+const MQTT_AUTH   = { username: 'viewer', password: 'v13wer-poc' };
+const MQTT_TOPIC  = `dt/${ASSETS.site.id}/span/+/sensor`;   // + = 동 id 와일드카드
+try {
+  const mc = mqtt.connect(MQTT_BROKER, { ...MQTT_AUTH, connectTimeout: 8000, reconnectPeriod: 4000 });
+  window._mqttClient = mc;
+  mc.on('connect', ()=>{
+    window._mqttState = 'live';
+    mc.subscribe(MQTT_TOPIC);
+    console.log('[MQTT] connected & subscribed:', MQTT_TOPIC);
+  });
+  mc.on('message', (topic, payload)=>{
+    // 토픽: dt/<site>/span/<id>/sensor  → 동 id 추출
+    const m = topic.match(/\/span\/(\d+)\/sensor$/);
+    if(!m) return;
+    try{
+      const d = JSON.parse(payload.toString());
+      window._mqttSensors[+m[1]] = { ...d, _ts: Date.now() };
+    }catch(e){/* 잘못된 페이로드 무시 */}
+  });
+  mc.on('error', ()=>{ window._mqttState='offline'; });
+  mc.on('offline', ()=>{ window._mqttState='offline'; });
+}catch(e){ window._mqttState='offline'; console.warn('[MQTT] init failed', e); }
 
 // ═══ three-mesh-bvh: BufferGeometry에 가속 충돌트리(BVH) 확장 주입 ═══
 //    정적 환경(통로벽/랙/지지기둥)에 대한 정밀 근접거리 질의를 ms 단위로 수행.
@@ -300,7 +447,7 @@ window.__physWorld = new RAPIER.World({ x:0, y:0, z:0 });   // 무중력: 검증
 /* ═══ 레이아웃 상수 (9.6m 정합 확인)
    Wall(0.15) | R1(0.9) | A1(2.85) | R2(0.9) | R3(0.9) | A2(2.85) | R4(0.9) | Wall(0.15) = 9.6 ✓
    ═══ */
-const GW=9.6, GL=50, GH=6, DR=0.50, DW=0.9;
+const GW=ASSETS.dimensions.GW, GL=ASSETS.dimensions.GL, GH=ASSETS.dimensions.GH, DR=0.50, DW=0.9;
 /* X축 레이아웃 (동폭 9.6m, 정비복도 75cm×3 + 랙4 + 통로 1.67m×2) — 2026-05-25 재설계
    [정비복도1 0~0.75][R1 0.75~1.75][통로A 1.75~3.42][R2 3.42~4.42]
    [정비복도2 4.42~5.17][R3 5.17~6.17][통로B 6.17~7.84][R4 7.84~8.84][정비복도3 8.84~9.59]
@@ -314,7 +461,7 @@ const A2S=6.17,  A2E=7.84,  A2W=1.67;           // 통로B
 const BPLTX=4.795;                              // 중앙(2-3열) 정비복도 자리 (구 칸막이벽 → 정비복도)
 const RACKXC=[R1C,R2C,R3C,R4C];
 const AISLE_XC=[A1C,A2C];
-const SPAN=5;
+const SPAN=ASSETS.site.spanCount;
 const TOTAL_W=GW*SPAN;   // 48m
 const HOUSE_X_MIN=0, HOUSE_X_MAX=TOTAL_W;
 
@@ -337,12 +484,8 @@ function ns(t,base,amp,ph){return base+amp*Math.sin(t*.00025+ph)+(Math.random()-
 
 /* ── 센서 ── */
 /* ── 작물 정의 (목표 환경) ── 1동 엽채류 / 2동 허브류 / 3·4·5동 병풀 */
-const CROPS = {
-  leaf: { name:'엽채류', icon:'🥬', tTar:[18,20], hTar:70, ecTar:1.8, color:0x6ee06a, shade:'low'  },  // 저온·고습
-  herb: { name:'허브류', icon:'🌿', tTar:[20,24], hTar:58, ecTar:1.6, color:0x8ad048, shade:'mid'  },  // 중온·저습·통풍
-  cica: { name:'병풀',   icon:'☘️', tTar:[22,26], hTar:75, ecTar:2.0, color:0x3aa86a, shade:'high' }   // 고온·고습·반음지
-};
-const SPAN_CROP = ['leaf','herb','cica','cica','cica'];  // 동별 작물 키
+const CROPS = ASSETS.crops;          // 작물 정의 (color는 10진수로 저장됨, three.js 그대로 수용)
+const SPAN_CROP = ASSETS.spanCrops;  // 동별 작물 키
 function cropOf(si){ return CROPS[SPAN_CROP[si]]; }
 
 const spans=Array.from({length:SPAN},(_,i)=>{
@@ -356,6 +499,7 @@ const spans=Array.from({length:SPAN},(_,i)=>{
 });
 spans[2].temp=27.2; spans[2].status='warning';   // 병풀 동 고온 경고 예시
 const tempHist=spans.map(s=>Array.from({length:30},()=>s.temp+rng(-.8,.8)));
+window.spans=spans; window.ASSETS=ASSETS;   // 디버깅/MQTT 검증용 노출 (read-only 참조)
 
 /* ── THREE.JS ── */
 const ctr=document.getElementById('ctr');
@@ -378,6 +522,30 @@ ctr.appendChild(ren.domElement);
 //    PBR(MeshStandardMaterial) 표면에 주변광 반사를 부여해 금속/플라스틱 질감을 살린다.
 const _pmrem=new THREE.PMREMGenerator(ren);
 scene.environment=_pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+
+// ⑤ Bloom 포스트프로세싱 — emissive(LED/경고등)가 실제로 번지며 발광.
+//    메인 뷰 전용(콕핏 3분할 scissor 렌더는 composer 비대상 → 기존 동작 보존).
+const composer=new EffectComposer(ren);
+composer.setPixelRatio(Math.min(devicePixelRatio,2));
+composer.setSize(ctr.clientWidth,ctr.clientHeight);
+composer.addPass(new RenderPass(scene,cam));
+const bloomPass=new UnrealBloomPass(
+  new THREE.Vector2(ctr.clientWidth,ctr.clientHeight),
+  0.55,  // strength — 과하지 않게 (모니터 가독성 우선)
+  0.5,   // radius
+  0.85   // threshold — 밝은 emissive만 번지게 (구조물 일반 표면 제외)
+);
+composer.addPass(bloomPass);
+
+// CSS2D 라벨 오버레이 — AMR/캐리어 ID를 3D 위에 HTML 라벨로.
+//    별도 DOM 레이어(포인터 통과), WebGL 부하 없음. 콕핏 뷰에선 숨김.
+const labelRen=new CSS2DRenderer();
+labelRen.setSize(ctr.clientWidth,ctr.clientHeight);
+labelRen.domElement.style.position='absolute';
+labelRen.domElement.style.top='0';
+labelRen.domElement.style.left='0';
+labelRen.domElement.style.pointerEvents='none';
+ctr.appendChild(labelRen.domElement);
 
 scene.add(new THREE.AmbientLight(0xffffff,.52));
 const sun=new THREE.DirectionalLight(0xfff0dd,1.05);
@@ -1654,47 +1822,45 @@ const C_STATE_KEY = ['run','pick','drop','idle','chg','idle','idle','pick'];
 const CHG_X = 4*GW + A2C;
 const CHG_Z = GL*.5;
 
-const carriers=[
-  {
-    id:'C-01', zone:'1·2·3동', vis:carrierVis[0],
-    x: 1*GW + A1C, z: GL*.4, aisle:0,
-    targetX: 1*GW + A1C, targetZ: GL*.7,
-    state:0, stateTimer:0,
-    battery: 78, carrying:false, drumColor:0xff8c30,
-    homeX: 1*GW + A1C, homeZ: GL*.5,
-    zoneSpan:[0,1,2],
+// 캐리어 — 정체성·초기상태·담당구역은 assets.json, 좌표(spawn 규칙)는 코드 계산식 (2계층 분리).
+//   spawn: 'A1'=통로A 시작 동, 'A2'=통로B, 'CHG'=충전소. 도메인 바뀌면 JSON의 spawn 키만 교체.
+const _carrierSpawn = {
+  'A1': { x: 1*GW + A1C, z: GL*.4, hx: 1*GW + A1C, hz: GL*.5, tx: 1*GW + A1C, tz: GL*.7, state:0 },
+  'A2': { x: 3*GW + A2C, z: GL*.6, hx: 3*GW + A2C, hz: GL*.5, tx: 3*GW + A2C, tz: GL*.3, state:0 },
+  'CHG':{ x: CHG_X,      z: CHG_Z, hx: CHG_X,      hz: CHG_Z, tx: CHG_X,      tz: CHG_Z, state:4 }
+};
+const carriers = ASSETS.carriers.map((c,i)=>{
+  const sp = _carrierSpawn[c.spawn];
+  return {
+    id:c.id, zone:c.zone, vis:carrierVis[i],
+    x: sp.x, z: sp.z, aisle:c.aisle,
+    targetX: sp.tx, targetZ: sp.tz,
+    state: sp.state, stateTimer:0,
+    battery: c.battery, carrying:false, drumColor:c.drumColor,
+    homeX: sp.hx, homeZ: sp.hz,
+    zoneSpan:c.zoneSpan,
     // 운영효율 메트릭
-    cycles: 0,            // 픽업+인계 완료 누계
-    cycleStart: 0,        // 현재 사이클 시작 timestamp(ms)
-    cycleTimes: [],       // 최근 N개 사이클 시간(s)
-    activeMs: 0,          // 가동 누적 시간(ms)
-    totalMs: 0            // 전체 경과 시간(ms)
-  },
-  {
-    id:'C-02', zone:'3·4·5동', vis:carrierVis[1],
-    x: 3*GW + A2C, z: GL*.6, aisle:1,
-    targetX: 3*GW + A2C, targetZ: GL*.3,
-    state:0, stateTimer:0,
-    battery: 64, carrying:false, drumColor:0xff6020,
-    homeX: 3*GW + A2C, homeZ: GL*.5,
-    zoneSpan:[2,3,4],
     cycles: 0, cycleStart: 0, cycleTimes: [], activeMs: 0, totalMs: 0
-  },
-  {
-    id:'C-03', zone:'예비 (충전 중)', vis:carrierVis[2],
-    x: CHG_X, z: CHG_Z, aisle:1,
-    targetX: CHG_X, targetZ: CHG_Z,
-    state:4, stateTimer:0,
-    battery: 96, carrying:false, drumColor:0xff8c30,
-    homeX: CHG_X, homeZ: CHG_Z,
-    zoneSpan:[4],
-    cycles: 0, cycleStart: 0, cycleTimes: [], activeMs: 0, totalMs: 0
-  }
-];
+  };
+});
 
 /* 캐리어 위치 초기화 */
 carriers.forEach(c=>{
   c.vis.grp.position.set(c.x, 0, c.z);
+});
+window.carriers = carriers;   // 물리 검증 엔진 조치(remediate)용 노출 (window.spans와 동일 패턴)
+
+/* CSS2D 라벨 — 캐리어 ID를 머리 위에 표시 (AMR은 밀집·과밀로 제외) */
+carriers.forEach(c=>{
+  const el=document.createElement('div');
+  el.textContent=c.id;
+  el.style.cssText='color:#cfeaff;background:rgba(16,32,46,.78);border:1px solid #2a4a60;'
+    +'border-radius:6px;padding:2px 7px;font:600 11px/1.2 system-ui,sans-serif;'
+    +'white-space:nowrap;transform:translateY(-4px);text-shadow:0 1px 2px #000;';
+  const lbl=new CSS2DObject(el);
+  lbl.position.set(0,2.6,0);   // 캐리어 그룹 로컬 기준 머리 위
+  c.vis.grp.add(lbl);
+  c._label=el;                 // 상태색 갱신용 참조 (향후 확장)
 });
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1761,6 +1927,75 @@ carriers.forEach(c=>{
   const hb=_mkHitBox({x:CARRIER_W/2+.05, z:CARRIER_L/2+.05}, 1.6);
   c.vis.grp.add(hb); c._hitBox=hb;
   const mv=COLL.movers.find(m=>m.id===c.id); if(mv) mv._hbRef=hb;   // mover에 직접 연결
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   통로폭 안전성 검증 분석 (비파괴) — 실제 씬 재배치 없이 Rapier 질의로 산출.
+   각 통로폭 가정 W에서: 캐리어(폭 1.5)가 통로 중심선을 따라 z=0~50 전 구간을
+   주행할 때 좌우 클리어런스와 "안전 주행 가능 횡방향 여유(±cm)"를 계산.
+   현재 벽은 1.67m 기준으로 등록돼 있으므로, W를 바꾸면 벽 안쪽면이 (1.67-W)/2 만큼
+   이동한 것과 같다 → 캐리어 중심이 가질 수 있는 횡방향 자유도를 환산.
+   ═══════════════════════════════════════════════════════════════════ */
+function analyzeAisleWidth(W){
+  const half = CARRIER_W/2;          // 캐리어 반폭 0.75
+  const clearance = (W - CARRIER_W)/2;   // 좌우 클리어런스(m): 통로폭-캐리어폭의 절반
+  const lateralFreedom = clearance;  // 중심에서 벗어날 수 있는 최대 횡편차(m)
+  // Rapier로 실측 검증: 현재 통로A(1.67) 중심 A1C에서, W 가정 시 캐리어가
+  // 좌/우로 lateralFreedom 만큼 이동했을 때 벽 침범 여부를 샘플링(z 11점 × 좌우 끝).
+  const cs = COLL.movers.find(m=>m.kind==='carrier').shape;
+  // W를 시뮬레이션하려면: 현재 벽(1.67기준)에서 캐리어가 (1.67-W)/2 만큼 더/덜 여유.
+  //   → 캐리어를 중심 + 허용편차 위치에 놓고 현재 벽과 교차하는지로 "그 폭에서 가능한가" 판정.
+  const allowedDev = clearance;       // W 통로에서 이론상 허용 편차
+  // 현재 벽 기준 캐리어가 닿지 않는 실제 최대 편차를 이진탐색(통로A span0)
+  let lo=0, hi=1.0;
+  for(let it=0; it<18; it++){
+    const mid=(lo+hi)/2;
+    const h=window.__physWorld.intersectionWithShape({x:A1C+mid, y:0.5, z:GL/2}, _ROT, cs);
+    if(h!==null && h!==undefined) hi=mid; else lo=mid;
+  }
+  const realMaxDev167 = lo;           // 1.67m 통로에서 측정된 실제 우측 최대 안전 편차(m)
+  // 다른 폭 W는: 벽이 (W-1.67)/2 만큼 더 멀어짐 → 안전 편차도 그만큼 변화
+  const estMaxDev = Math.max(0, realMaxDev167 + (W-A1W)/2);
+  const feasible = clearance >= 0;    // 폭이 캐리어보다 좁으면 물리적 불가
+  return {
+    W, clearance, allowedDev,
+    measuredDev167: realMaxDev167,
+    estSafeDev: estMaxDev,
+    feasible,
+    marginCm: Math.round(clearance*100),       // 좌우 여유 cm
+    safeBandCm: Math.round(estMaxDev*2*100)     // 안전 주행 밴드 폭 cm (좌우 합)
+  };
+}
+window.analyzeAisleWidth = analyzeAisleWidth;
+
+function renderAisleVerdict(W){
+  const r=analyzeAisleWidth(W);
+  const el=document.getElementById('aisleResult');
+  if(!el) return;
+  const verdict = !r.feasible
+    ? `<span style="color:#E24B4A">⛔ 불가 — 캐리어(1.5m)가 통로보다 넓음</span>`
+    : r.marginCm < 5
+      ? `<span style="color:#E24B4A">⚠️ 위험 — 좌우 여유 ${r.marginCm}cm (정밀 주행 필수)</span>`
+      : r.marginCm < 12
+        ? `<span style="color:#EF9F27">△ 빠듯 — 좌우 여유 ${r.marginCm}cm</span>`
+        : `<span style="color:#39d98a">✓ 안전 — 좌우 여유 ${r.marginCm}cm</span>`;
+  el.innerHTML =
+    `${verdict}<br>`+
+    `· 좌우 클리어런스: <b style="color:#cfe">${r.marginCm}cm</b> (편측)<br>`+
+    `· 안전 주행 밴드: <b style="color:#cfe">${r.safeBandCm}cm</b><br>`+
+    `· 측정(1.67m 실측 편차): <b style="color:#cfe">±${(r.measuredDev167*100).toFixed(1)}cm</b>`;
+}
+// 버튼 이벤트
+document.querySelectorAll('.aisleBtn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('.aisleBtn').forEach(x=>{
+      x.classList.remove('active');
+      x.style.background='#0a1828'; x.style.color='#8fb0a4'; x.style.borderColor='#1d3a4a';
+    });
+    b.classList.add('active');
+    b.style.background='#0a3a34'; b.style.color='#5ee0e8'; b.style.borderColor='#2a6a5a';
+    renderAisleVerdict(parseFloat(b.dataset.w));
+  });
 });
 
 // ── (4) 매 tick 호출: 위치 동기화 → Rapier step → 교차 질의 → 표시 ──
@@ -2035,17 +2270,20 @@ function buildAVN(id, label, color, zHome, zReach){
 //   ※ AMR 이동속도 재원 미확정 → 실데이터 시점에 작업효율 맞춰 대수 재조정 예정.
 const AMR_IN_CLR = 0x40a0ff, AMR_OUT_CLR = 0xffa040;
 // 캐리어별: IN 3 + OUT 1
+// AMR — 캐리어당 IN n·OUT m 규칙만 assets.json. 생성·좌표·상태머신은 코드 유지 (2계층 분리).
 const _amrDefs = [];
-['C-01','C-02','C-03'].forEach((cid, ci)=>{
-  for(let k=1;k<=3;k++) _amrDefs.push({id:`IN-${ci+1}${k}`, kind:'in', carrier:cid});
-  _amrDefs.push({id:`OUT-${ci+1}`, kind:'out', carrier:cid});
+const _amrCfg = ASSETS.amrConfig.perCarrier;
+ASSETS.carriers.forEach((c, ci)=>{
+  for(let k=1;k<=_amrCfg.in;k++)  _amrDefs.push({id:`IN-${ci+1}${k}`, kind:'in',  carrier:c.id});
+  for(let k=1;k<=_amrCfg.out;k++) _amrDefs.push({id:`OUT-${ci+1}`,    kind:'out', carrier:c.id});
 });
 const amrVis = _amrDefs.map(d =>
   buildAVN(d.id, d.id, d.kind==='in'?AMR_IN_CLR:AMR_OUT_CLR, CROSS_AISLE_Z, GL*.5)
 );
 
 // AMR 초기 위치 — 담당 캐리어 통로 근처 분산 (이후 캐리어 추종)
-const _aisleXOf = {'C-01':GW*1+A1C, 'C-02':GW*3+A2C, 'C-03':GW*4+A2C};
+//   캐리어 spawn X좌표를 그대로 재사용 (assets.json carriers와 일관, id 하드코딩 제거)
+const _aisleXOf = Object.fromEntries(ASSETS.carriers.map(c=>[c.id, _carrierSpawn[c.spawn].x]));
 const amrHomeXs = _amrDefs.map((d,i)=> _aisleXOf[d.carrier] + ((i%4)-1.5)*0.7);
 amrVis.forEach((v, i)=>{
   v.grp.position.set(amrHomeXs[i], 0, CROSS_AISLE_Z);
@@ -2098,6 +2336,7 @@ amrPool.forEach(a=>{
 // ── Rapier broad-phase(QBVH) 구축: 정적 콜라이더 등록 후 1회 step 필수.
 //    step 없이는 intersectionWithShape가 정적 장애물을 못 찾는다(검증으로 확인).
 window.__physWorld.step();
+renderAisleVerdict(1.67);   // 통로폭 검증 패널 초기 렌더(현재 폭)
 
 // 작업 큐 — 캐리어가 요청 push, AMR이 한가하면 pop
 // req: { kind:'pickup-out'|'delivery-in', carrier, requestedAt }
@@ -3114,8 +3353,11 @@ function loop(ts){
     });
     ren.setScissorTest(false);
     ren.setViewport(0, 0, w, h);   // 다른 뷰 복귀 대비 전체 뷰포트 원복
+    labelRen.domElement.style.display='none';   // 3분할에선 라벨 숨김
   }else{
-    ren.render(scene,cam);
+    composer.render();             // ⑤ Bloom 경유 (RenderPass가 scene,cam 렌더)
+    labelRen.domElement.style.display='';
+    labelRen.render(scene,cam);
   }
 }
 loop(0);
@@ -3267,9 +3509,21 @@ function tick(){
   spans.forEach(s=>{
     // 작물 목표값 중심으로 변동 (제어가 목표 유지 중인 상태 시뮬)
     const cp = s.crop, tMid=(cp.tTar[0]+cp.tTar[1])/2;
-    s.temp=ns(T, tMid + (s.id===3?2.2:0), 1.1, s.phase);   // 3동은 경고용 고온
-    s.hum =ns(T, cp.hTar, 5, s.phase+1.5);
-    s.ec  =ns(T, cp.ecTar, .16, s.phase+.8); s.ph=ns(T,6.1,.22,s.phase+2);
+    // 실데이터 우선: 최근 10초 내 MQTT 수신값이 있으면 사용, 없으면 mock fallback.
+    const live = window._mqttSensors[s.id];
+    const fresh = live && (Date.now()-live._ts < 10000);
+    if(fresh){
+      if(live.temp!=null) s.temp=live.temp; else s.temp=ns(T, tMid+(s.id===3?2.2:0),1.1,s.phase);
+      if(live.hum !=null) s.hum =live.hum;  else s.hum =ns(T, cp.hTar,5,s.phase+1.5);
+      if(live.ec  !=null) s.ec  =live.ec;   else s.ec  =ns(T, cp.ecTar,.16,s.phase+.8);
+      if(live.ph  !=null) s.ph  =live.ph;   else s.ph  =ns(T,6.1,.22,s.phase+2);
+      s._dataSrc='live';
+    }else{
+      s.temp=ns(T, tMid + (s.id===3?2.2:0), 1.1, s.phase);   // 3동은 경고용 고온
+      s.hum =ns(T, cp.hTar, 5, s.phase+1.5);
+      s.ec  =ns(T, cp.ecTar, .16, s.phase+.8); s.ph=ns(T,6.1,.22,s.phase+2);
+      s._dataSrc='mock';
+    }
     // 경고: 작물 목표 온도 범위 ±2°C 초과 또는 습도 목표 ±12% 초과
     const tOut = s.temp > cp.tTar[1]+2 || s.temp < cp.tTar[0]-2;
     const hOut = Math.abs(s.hum - cp.hTar) > 12;
@@ -4050,9 +4304,889 @@ window.focusCarrier=function(cid){
 
 window.addEventListener('resize',()=>{
   cam.aspect=ctr.clientWidth/ctr.clientHeight;cam.updateProjectionMatrix();
-  ren.setSize(ctr.clientWidth,ctr.clientHeight);drawSpk();
+  ren.setSize(ctr.clientWidth,ctr.clientHeight);
+  composer.setSize(ctr.clientWidth,ctr.clientHeight);
+  labelRen.setSize(ctr.clientWidth,ctr.clientHeight);
+  drawSpk();
 });
 drawSpk();
+
+/* ══════════════════════════════════════════════════════════════════════
+   물리 검증 엔진 (Physics Validator) — DT 객체가 물리/운영 규칙을 어기는지 자동 탐지
+   기존 runCollisionCheck(관통·중복점유)는 그대로 두고, 빠진 2축을 추가 + 종합 노출.
+   · 순간이동(TELEPORT)  : 프레임 간 이동거리/dt > 최대속도 → 물리적으로 불가능
+   · 통로이탈(OFF_LANE)  : 동 로컬 X가 통로(주행허용) 밖 = 랙/벽 위에 올라섬
+   · (관통 PENETRATION / 중복점유 OVERLAP 은 COLL.movers[]._hit 재사용)
+   비침습: window.COLL을 읽기만. 위반은 window.__physValidator로 노출(코파일럿이 음성보고).
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(!window.COLL){ return; }   // 충돌 시스템 없으면 검증 엔진 비활성
+
+  // 동 로컬 X 기준 "주행 허용 구역"(통로A·B + 양끝 여유). 주석의 X레이아웃과 일치.
+  // 통로A 1.75~3.42, 통로B 6.17~7.84. 캐리어 반폭(0.75) 고려해 약간 확장.
+  const LANES = [[1.55,3.62],[5.97,8.04]];   // [min,max] in 동 로컬 X(m)
+  const GW_LOCAL = (typeof GW==='number') ? GW : 9.6;
+  const V_MAX = 8.0;            // 최대 현실 속도 (m/s) — 이보다 빠른 위치변화는 순간이동
+  const OFF_LANE_TOL = 0.0;     // 통로 경계 허용오차
+
+  const PV = {
+    enabled: true,
+    violations: [],            // 현재 프레임 위반 [{id, kind, type, detail}]
+    counts: { TIPOVER:0, OVERACCEL:0, IMMINENT:0, TELEPORT:0, OFF_LANE:0, PENETRATION:0, OVERLAP:0, THERMO:0, RESIDUAL:0, CAUSALITY:0, STUCK:0, ANOMALY:0, PREDICT:0 },
+    log: [],                   // 최근 위반 이력 (id,type,t)
+    _prev: {},                 // {id: {x,z,t}}
+    _lastGood: {},             // {id: {x,z}} — 마지막 위반 없던 좌표 (TELEPORT 롤백·통로복귀 기준)
+    _lastT: 0
+  };
+  // 위반 유형 우선순위 (조치 시 가장 심각한 것부터)
+  const SEVERITY = { PENETRATION:4, TIPOVER:4, CAUSALITY:3, IMMINENT:3, OVERLAP:3, RESIDUAL:3, STUCK:2, OVERACCEL:2, OFF_LANE:2, THERMO:2, ANOMALY:2, PREDICT:1, TELEPORT:1 };
+  const PREDICT_SEC = 1.2;        // 예측 지평(초): 현재 속도로 이 시간 뒤 위치가 통로 밖이면 관통 임박
+  PV.estopped = {};               // {id: ts} — 예측 정지된 캐리어
+  PV.issues = [];                 // 자동조치 불가로 운영자 판단이 필요한 이슈 (우회 불가 등)
+
+  // ─── 1순위 동역학(Dynamics) 파라미터 — 피지컬 AI ───
+  // 캐리어 물리 추정: 치수 1.5×1.8×5.0m(W×L×H). 질량 데이터 없어 추정.
+  const DYN = {
+    A_MAX: 1.5,          // 최대 가속/감속 (m/s²) — 산업 AGV 통상치
+    JERK_MAX: 3.0,       // 최대 저크 (m/s³) — 급격한 가속도 변화 한계
+    BRAKE_DECEL: 1.2,    // 제동 감속도 (m/s²) — 질량기반 제동거리 계산용
+    H_COG: 2.0,          // 무게중심 높이(m): 빈 캐리어 (적재 시 상향)
+    H_COG_LOADED: 3.2,   // 적재(드럼 4단 5.13m 일부) 시 무게중심 높이
+    TRACK_W: 1.5         // 윤거(폭) — 전복 한계 계산
+  };
+  PV._kin = {};          // {id: {vx,vz,speed,ax,az,accel,t}} — 직전 운동학(가속도·저크 계산용)
+
+  function localX(x){ let lx = x % GW_LOCAL; if(lx<0) lx+=GW_LOCAL; return lx; }
+  function inAnyLane(lx){
+    // 횡단(가로) 통로 주행도 정상이므로, 세로통로 구역 밖이라도 z-횡단 이동은 별도 판단 불가 →
+    // 보수적으로 세로통로 X구역만 "허용"으로 보고, 벗어나면 후보 위반. (오탐은 코파일럿이 맥락 설명)
+    return LANES.some(([a,b])=> lx>=a-OFF_LANE_TOL && lx<=b+OFF_LANE_TOL);
+  }
+
+  // ─── 2순위 환경물리 + 3순위 센서-물리 교차검증 ───
+  PV._env = {};   // {spanId: {temp, t}} — 직전 온도(상승률 계산)
+  const ENV = {
+    TEMP_RATE_MAX: 0.8,   // 물리적 최대 온도 변화율 (°C/초) — 열용량상 급변 불가 (난방/냉방 한계)
+    RESIDUAL_MAX: 4.0,    // 모델 예측-실측 잔차 임계 (°C) — 초과 지속 시 센서/물리 이상
+    RESIDUAL_HOLD: 3      // 잔차 임계 연속 횟수 (단발 노이즈 제외)
+  };
+  PV._residHold = {};     // {spanId: count}
+
+  // ─── 4순위 시간·인과 검증 ───
+  PV._cstate = {};        // {id: {state, carrying, stateSince}} — 캐리어 상태 추적
+  const CAUSAL = { STATE_STUCK_SEC: 90 };   // 한 상태 정체(deadlock) 의심 임계
+  // ─── 5순위 학습형 이상탐지 (온라인 베이스라인 + z-score) ───
+  PV._base = {};          // {key: {n,mean,m2}} — Welford 온라인 통계
+  const LEARN = { WARMUP:40, Z_MAX:4.0, MIN_STD:0.05 };
+  // ─── 3안: 예측 정비 (Predictive Maintenance) — 추세 외삽으로 임계 도달 사전 경보 ───
+  PV._trend = {};         // {key: [{t,val}...]} — 추세 추정용 슬라이딩 윈도우
+  PV.forecasts = [];      // 현재 예측 경보 (운영자 사전 점검용)
+  const PRED = {
+    WINDOW: 30,           // 회귀 표본 수
+    SAMPLE_MS: 2000,      // 추세 다운샘플 간격(ms) — 단기 노이즈 평균화
+    TTF_WARN_SEC: 300,    // 임계 도달 경보 (5분)
+    MIN_SLOPE: 0.02,      // 유의미한 추세 하한 (°C/s = 1.2°C/min) — 노이즈 기울기 제외
+    MIN_R2: 0.6,          // 추세 적합도 하한 — 실제 선형 추세일 때만(노이즈는 R²↓)
+    MARGIN: 0.5
+  };
+  // 최소제곱 선형회귀 → 기울기 + R²(적합도)
+  function linregSlope(pts){
+    const n=pts.length; if(n<6) return null;
+    let sx=0,sy=0,sxx=0,sxy=0,syy=0;
+    const t0=pts[0].t;
+    for(const p of pts){ const x=(p.t-t0)/1000; sx+=x; sy+=p.val; sxx+=x*x; sxy+=x*p.val; syy+=p.val*p.val; }
+    const d=n*sxx-sx*sx; if(Math.abs(d)<1e-9) return null;
+    const slope=(n*sxy-sx*sy)/d;
+    const num=(n*sxy-sx*sy); const den=Math.sqrt(d*(n*syy-sy*sy));
+    const r2 = den>1e-9 ? (num*num)/(d*(n*syy-sy*sy)) : 0;
+    return { slope, last:pts[n-1].val, r2 };
+  }
+  function learnUpdate(key, x){
+    let b=PV._base[key]; if(!b){ b=PV._base[key]={n:0,mean:0,m2:0}; }
+    b.n++; const d=x-b.mean; b.mean+=d/b.n; b.m2+=d*(x-b.mean);
+    return b;
+  }
+  function zScore(b, x){
+    if(!b || b.n<LEARN.WARMUP) return 0;
+    const std=Math.max(LEARN.MIN_STD, Math.sqrt(b.m2/b.n));
+    return Math.abs(x-b.mean)/std;
+  }
+
+  function validateEnvPhysics(v, now, dt){
+    const spans = window.spans || [];
+    for(const s of spans){
+      // (2-a) 열역학 정합: 온도 변화율이 물리적 한계 초과? (급변 = 센서오류/모델붕괴 의심)
+      const prev = PV._env[s.id];
+      if(prev && dt>0){
+        const rate = Math.abs(s.temp - prev.temp) / dt;
+        if(rate > ENV.TEMP_RATE_MAX){
+          v.push({id:s.id+'동', kind:'env', type:'THERMO',
+            detail:`온도변화 ${rate.toFixed(1)}°C/s (물리한계 ${ENV.TEMP_RATE_MAX}) — 센서/모델 의심`});
+        }
+      }
+      PV._env[s.id] = {temp:s.temp, t:now};
+
+      // (3) 센서-물리 교차검증: 물리 모델 예측값 vs 실측(MQTT) 잔차 분석.
+      //   모델 예측 = 작물 목표 온도범위 중앙(설비 정상 시 수렴해야 할 값).
+      const live = window._mqttSensors && window._mqttSensors[s.id];
+      const isLive = live && (now - (live._ts? (performance.now()-(Date.now()-live._ts)) : 0) < 12000) && s._dataSrc==='live';
+      if(s.crop && s.crop.tTar){
+        const predicted = (s.crop.tTar[0] + s.crop.tTar[1]) / 2;   // 물리 모델 기대 평형 온도
+        const residual = Math.abs(s.temp - predicted);
+        if(residual > ENV.RESIDUAL_MAX){
+          PV._residHold[s.id] = (PV._residHold[s.id]||0) + 1;
+          if(PV._residHold[s.id] >= ENV.RESIDUAL_HOLD){
+            // 잔차 지속 → 실데이터면 PHYSICAL_ANOMALY(실제 이상), mock이면 모델 편차
+            v.push({id:s.id+'동', kind:'env', type:'RESIDUAL',
+              detail:`예측 ${predicted.toFixed(1)}°C vs 실측 ${(+s.temp).toFixed(1)}°C, 잔차 ${residual.toFixed(1)}°C ${isLive?'(실센서)':''}`});
+          }
+        } else {
+          PV._residHold[s.id] = 0;
+        }
+      }
+    }
+  }
+
+  // ─── 4순위: 시간·인과 검증 (이벤트 순서·상태 정체) ───
+  function validateCausal(v, now, dt){
+    const carriers = window.carriers || [];
+    for(const c of carriers){
+      const prev = PV._cstate[c.id];
+      const st = c.state|0, carrying = !!c.carrying;
+      if(prev){
+        // (a) 인과 위반: 픽업(1) 거치지 않고 적재 상태가 됨 (carrying false→true인데 직전이 픽업 아님)
+        if(!prev.carrying && carrying && prev.state!==1){
+          v.push({id:c.id, kind:'carrier', type:'CAUSALITY',
+            detail:`픽업(state1) 없이 적재됨 (직전 state ${prev.state})`});
+        }
+        // (b) 인과 위반: 충전(4) 상태인데 위치가 이동함 = 불가능한 동시 동작
+        if(st===4 && PV._prev[c.id]){
+          const pr=PV._prev[c.id]; const moved=Math.hypot(c.x-pr.x, (c.z||0)-(pr.z||0));
+          if(moved>0.5) v.push({id:c.id, kind:'carrier', type:'CAUSALITY', detail:`충전 중 이동 ${moved.toFixed(1)}m (불가능)`});
+        }
+        // (c) 상태 정체: 같은 state에 너무 오래 (deadlock 의심)
+        if(prev.state===st){
+          const heldSec=(now-prev.stateSince)/1000;
+          if(heldSec > CAUSAL.STATE_STUCK_SEC){
+            v.push({id:c.id, kind:'carrier', type:'STUCK', detail:`state ${st}에 ${heldSec.toFixed(0)}s 정체 (한계 ${CAUSAL.STATE_STUCK_SEC})`});
+          }
+          PV._cstate[c.id]={state:st, carrying, stateSince:prev.stateSince};
+        } else {
+          PV._cstate[c.id]={state:st, carrying, stateSince:now};   // 상태 전이 → 타이머 리셋
+        }
+      } else {
+        PV._cstate[c.id]={state:st, carrying, stateSince:now};
+      }
+    }
+  }
+
+  // ─── 5순위: 학습형 이상탐지 (정상 패턴 학습 → z-score 이상치) ───
+  function validateLearned(v, now, dt){
+    // 캐리어 속도 학습 (위반 중이면 학습 제외 — 오염 방지)
+    const violIds=new Set(v.map(x=>x.id));
+    for(const c of (window.carriers||[])){
+      const k=PV._kin[c.id]; if(!k) continue;
+      const key='spd:'+c.id;
+      if(violIds.has(c.id)) continue;        // 이상 중인 값은 베이스라인에 안 넣음
+      const z=zScore(PV._base[key], k.speed);
+      if(z > LEARN.Z_MAX){
+        v.push({id:c.id, kind:'carrier', type:'ANOMALY', detail:`속도 ${k.speed.toFixed(1)}m/s, 학습기준 z=${z.toFixed(1)}σ`});
+      } else {
+        learnUpdate(key, k.speed);           // 정상 범위만 학습
+      }
+    }
+    // 동 온도/EC 학습
+    for(const s of (window.spans||[])){
+      const sid=s.id+'동';
+      for(const [metric, val] of [['temp',+s.temp],['ec',+s.ec]]){
+        if(val==null||!isFinite(val)) continue;
+        const key=metric+':'+s.id;
+        if(violIds.has(sid)) continue;
+        const z=zScore(PV._base[key], val);
+        if(z > LEARN.Z_MAX){
+          v.push({id:sid, kind:'env', type:'ANOMALY', detail:`${metric} ${val.toFixed(1)}, 학습기준 z=${z.toFixed(1)}σ`});
+        } else {
+          learnUpdate(key, val);
+        }
+      }
+    }
+  }
+
+  // ─── 3안: 예측 정비 (Predictive Maintenance) — 추세 외삽으로 임계 도달 사전 경보 ───
+  function pushTrend(key, t, val){
+    let buf=PV._trend[key]; if(!buf){ buf=PV._trend[key]=[]; }
+    // 다운샘플: 마지막 표본과 SAMPLE_MS 이상 벌어졌을 때만 추가 (단기 노이즈 평균화)
+    if(buf.length && (t - buf[buf.length-1].t) < PRED.SAMPLE_MS) return buf;
+    buf.push({t,val}); if(buf.length>PRED.WINDOW) buf.shift();
+    return buf;
+  }
+  function validatePredictive(v, now, dt){
+    PV.forecasts = [];
+    for(const s of (window.spans||[])){
+      if(!s.crop || !s.crop.tTar) continue;
+      const sid=s.id+'동';
+      // 온도 추세 → 목표범위 상/하한 도달 예측
+      const buf=pushTrend('temp:'+s.id, now, +s.temp);
+      const reg=linregSlope(buf);
+      if(!reg || Math.abs(reg.slope) < PRED.MIN_SLOPE || reg.r2 < PRED.MIN_R2) continue;   // 추세 미약/비선형(노이즈) 제외
+      const hi=s.crop.tTar[1]+PRED.MARGIN, lo=s.crop.tTar[0]-PRED.MARGIN;
+      let ttf=null, bound=null;
+      if(reg.slope>0 && reg.last<hi){ ttf=(hi-reg.last)/reg.slope; bound='상한 '+hi.toFixed(1)+'°C'; }
+      else if(reg.slope<0 && reg.last>lo){ ttf=(lo-reg.last)/reg.slope; bound='하한 '+lo.toFixed(1)+'°C'; }
+      if(ttf!=null && ttf>0 && ttf < PRED.TTF_WARN_SEC){
+        const mins=(ttf/60).toFixed(1);
+        const fc={ id:sid, metric:'temp', ttf_sec:Math.round(ttf), detail:`${mins}분 후 ${bound} 도달 예상 (현재 ${(+s.temp).toFixed(1)}°C, ${reg.slope>0?'+':''}${(reg.slope*60).toFixed(2)}°C/min)` };
+        PV.forecasts.push(fc);
+        PV.counts.PREDICT = (PV.counts.PREDICT||0) + 1;   // 카운트만(예측정비 그룹 표시용), violations 비포함
+      }
+    }
+  }
+
+  function validate(now){
+    if(!PV.enabled) return;
+    const dt = PV._lastT ? Math.max(0.001,(now-PV._lastT)/1000) : 0.016;
+    PV._lastT = now;
+    const v = [];
+    const movers = window.COLL.movers || [];
+    for(const m of movers){
+      let p; try{ p=m.getPos(); }catch(e){ continue; }
+      if(!p) continue;
+      // ① 순간이동: 직전 위치 대비 속도
+      const pr = PV._prev[m.id];
+      if(pr){
+        const d = Math.hypot(p.x-pr.x, p.z-pr.z);
+        const spd = d/dt;
+        if(spd > V_MAX && d > 1.0){   // d>1m AND 비현실 속도 (작은 떨림 제외)
+          v.push({id:m.id, kind:m.kind, type:'TELEPORT', detail:`${spd.toFixed(1)}m/s (한계 ${V_MAX})`});
+        }
+        // ★ 예측 정지 + 동역학(Dynamics) 검증 — 캐리어 한정 (피지컬 AI 1순위)
+        if(m.kind==='carrier'){
+          const vx=(p.x-pr.x)/dt, vz=(p.z-pr.z)/dt;
+          const speed=Math.hypot(vx,vz);
+          // (a) 예측 정지: 관통 전 e-stop
+          if(speed>0.3){
+            const fx=p.x+vx*PREDICT_SEC;
+            const nowInLane=inAnyLane(localX(p.x));
+            if(nowInLane && !inAnyLane(localX(fx))){
+              const c=(window.carriers||[]).find(x=>x.id===m.id);
+              if(c){ c.targetX=p.x; c.targetZ=p.z; PV.estopped[m.id]=now; }
+              v.push({id:m.id, kind:m.kind, type:'IMMINENT', detail:`${PREDICT_SEC}s 뒤 통로이탈 예측 → 정지`});
+            }
+          }
+          // (b) 가속도·저크 한계: 물리적으로 불가능한 가감속
+          const k=PV._kin[m.id];
+          if(k){
+            const ax=(vx-k.vx)/dt, az=(vz-k.vz)/dt;
+            const accel=Math.hypot(ax,az);
+            if(accel > DYN.A_MAX && speed>0.2){
+              v.push({id:m.id, kind:m.kind, type:'OVERACCEL', detail:`가속 ${accel.toFixed(1)}m/s² (한계 ${DYN.A_MAX})`});
+            }
+            if(k.accel!=null){
+              const jerk=Math.abs(accel-k.accel)/dt;
+              if(jerk > DYN.JERK_MAX && accel>0.5){
+                v.push({id:m.id, kind:m.kind, type:'OVERACCEL', detail:`저크 ${jerk.toFixed(1)}m/s³ (한계 ${DYN.JERK_MAX})`});
+              }
+            }
+            // (c) 적재 전복(tip-over): 횡가속도가 무게중심 전도 한계 초과
+            //   전복 임계 횡가속도 a_tip = g·(윤거/2)/H_cog. 적재 시 H_cog↑ → 더 쉽게 전복.
+            const c=(window.carriers||[]).find(x=>x.id===m.id);
+            const hcog = (c && c.carrying) ? DYN.H_COG_LOADED : DYN.H_COG;
+            const aTip = 9.81 * (DYN.TRACK_W/2) / hcog;
+            // 횡(곡선) 가속도 ≈ 속도 변화 중 방향전환 성분. 보수적으로 전체 가속도 사용.
+            if(accel > aTip && speed>1.0){
+              v.push({id:m.id, kind:m.kind, type:'TIPOVER',
+                detail:`횡가속 ${accel.toFixed(1)} > 전복한계 ${aTip.toFixed(1)}m/s² (${c&&c.carrying?'적재':'공차'})`});
+            }
+            PV._kin[m.id]={vx,vz,speed,accel,t:now};
+          } else {
+            PV._kin[m.id]={vx,vz,speed,accel:null,t:now};
+          }
+        }
+      }
+      PV._prev[m.id] = {x:p.x, z:p.z, t:now};
+      // ② 통로이탈: 동 로컬 X가 통로 밖
+      const lx = localX(p.x);
+      if(!inAnyLane(lx)){
+        v.push({id:m.id, kind:m.kind, type:'OFF_LANE', detail:`동내 X=${lx.toFixed(2)}m (통로 밖)`});
+      }
+      // ③ 관통/중복점유: 기존 COLL 결과 재사용
+      if(m._hit){
+        v.push({id:m.id, kind:m.kind, type:'PENETRATION', detail:'구조물/타객체 간섭(COLL)'});
+      }
+    }
+    // ─── 2·3순위: 환경물리 정합성 + 센서-물리 교차검증 (동 단위, 피지컬 AI) ───
+    validateEnvPhysics(v, now, dt);
+    // ─── 4순위 시간·인과 + 5순위 학습형 이상탐지 ───
+    validateCausal(v, now, dt);
+    validateLearned(v, now, dt);
+    validatePredictive(v, now, dt);   // 3안: 예측 정비
+    // 위반 없는 무버의 현재 좌표 = 마지막 정상 위치 (롤백/복귀 기준으로 저장)
+    const violatingIds = new Set(v.map(x=>x.id));
+    for(const m of movers){
+      if(!violatingIds.has(m.id)){
+        let p; try{ p=m.getPos(); }catch(e){ continue; }
+        if(p && isFinite(p.x) && isFinite(p.z)) PV._lastGood[m.id]={x:p.x, z:p.z};
+      }
+    }
+    // 집계
+    PV.counts = { TIPOVER:0, OVERACCEL:0, IMMINENT:0, TELEPORT:0, OFF_LANE:0, PENETRATION:0, OVERLAP:0, THERMO:0, RESIDUAL:0, CAUSALITY:0, STUCK:0, ANOMALY:0, PREDICT:0 };
+    for(const x of v){ if(PV.counts[x.type]!=null) PV.counts[x.type]++; }
+    PV.counts.PREDICT = (PV.forecasts||[]).length;   // 예측정비는 violations 아님 → forecasts로 카운트
+    // 신규 위반만 로그 (id+type 키)
+    const prevKeys = new Set(PV.violations.map(x=>x.id+x.type));
+    for(const x of v){
+      if(!prevKeys.has(x.id+x.type)){
+        PV.log.unshift({id:x.id, type:x.type, detail:x.detail, t:now});
+        if(PV.log.length>10) PV.log.pop();
+      }
+    }
+    PV.violations = v;
+    renderPanel();
+  }
+
+  /* ── 검증 패널 (좌하단, 평시 접힘) ── */
+  let panelEl=null, listEl=null, badgeEl=null;
+  function ensurePanel(){
+    if(panelEl) return;
+    panelEl=document.createElement('div'); panelEl.id='pvPanel';
+    panelEl.innerHTML=`<div id="pvHead"><span id="pvDot"></span>물리 검증 엔진<span id="pvBadge">0</span><button id="pvFold">▾</button></div><div id="pvBody"><div id="pvCounts"></div><div id="pvList"></div></div>`;
+    document.body.appendChild(panelEl);
+    listEl=panelEl.querySelector('#pvList'); badgeEl=panelEl.querySelector('#pvBadge');
+    panelEl.querySelector('#pvFold').onclick=()=>panelEl.classList.toggle('folded');
+    panelEl.querySelector('#pvHead').onclick=(e)=>{ if(e.target.id!=='pvFold') panelEl.classList.toggle('folded'); };
+  }
+  const LABEL={TIPOVER:'적재전복위험',OVERACCEL:'과가속',IMMINENT:'관통임박정지',TELEPORT:'순간이동',OFF_LANE:'통로이탈',PENETRATION:'구조물관통',OVERLAP:'중복점유',THERMO:'열역학이상',RESIDUAL:'센서-물리편차',CAUSALITY:'인과위반',STUCK:'상태정체',ANOMALY:'학습이상치',PREDICT:'사전정비경보'};
+  // 12개 검증 축 → 5개 카테고리 그룹 (패널 가독성)
+  const CAT = [
+    { name:'운동학', types:['TELEPORT','OFF_LANE','PENETRATION','OVERLAP','IMMINENT'] },
+    { name:'동역학', types:['OVERACCEL','TIPOVER'] },
+    { name:'환경물리', types:['THERMO','RESIDUAL'] },
+    { name:'시간·인과', types:['CAUSALITY','STUCK'] },
+    { name:'학습형', types:['ANOMALY'] },
+    { name:'예측정비', types:['PREDICT'] }
+  ];
+  function renderPanel(){
+    ensurePanel();
+    const total=PV.violations.length;
+    badgeEl.textContent=total;
+    panelEl.classList.toggle('alert', total>0);
+    const c=PV.counts;
+    // 카테고리별 그룹 — 각 그룹의 활성 위반 수를 헤더에, 칩은 위반 있는 것만 강조
+    panelEl.querySelector('#pvCounts').innerHTML = CAT.map(g=>{
+      const gsum = g.types.reduce((a,t)=>a+(c[t]||0),0);
+      const isPredict = g.name==='예측정비';   // 예측은 위반 아님 → 빨강 alert 제외(정보성)
+      const chips = g.types.map(t=>`<span class="pvc${c[t]>0?' on':''}">${LABEL[t]} ${c[t]||0}</span>`).join('');
+      return `<div class="pvGrp${gsum>0&&!isPredict?' on':''}"><div class="pvGh">${g.name}${gsum>0?` <b>${gsum}</b>`:''}</div><div class="pvGc">${chips}</div></div>`;
+    }).join('');
+    // 이슈 섹션 (운영자 판단 필요 — 자동조치 불가 항목)
+    const issues = PV.issues || [];
+    const issuesHtml = issues.length
+      ? `<div class="pvIssH">⚠ 운영자 판단 필요 (${issues.length})</div>` +
+        issues.slice(0,4).map(i=>`<div class="pvIss"><b>${i.id}</b> ${i.kind}<span class="pvDet">${(i.detail||'').slice(0,46)}</span></div>`).join('')
+      : '';
+    // 예측 정비 섹션 (사전 경보 — TTF)
+    const fc = PV.forecasts || [];
+    const fcHtml = fc.length
+      ? `<div class="pvFcH">🔮 사전 정비 경보 (${fc.length})</div>` +
+        fc.slice(0,3).map(f=>`<div class="pvFc"><b>${f.id}</b><span class="pvDet">${(f.detail||'').slice(0,50)}</span></div>`).join('')
+      : '';
+    // 최근 위반 로그 (PREDICT는 로그에서 제외 — 예측 섹션에 따로 표시)
+    const realLog = PV.log.filter(e=>e.type!=='PREDICT');
+    const logHtml = !realLog.length
+      ? '<div class="pvEmpty">위반 없음 — 모든 객체 정상</div>'
+      : realLog.slice(0,5).map(e=>`<div class="pvRow"><b>${e.id}</b> ${LABEL[e.type]||e.type}<span class="pvDet">${e.detail||''}</span></div>`).join('');
+    listEl.innerHTML = issuesHtml + fcHtml + logHtml;
+  }
+
+  /* ── 조치(remediate): 위반 유형별 대안 산출 + 실제 캐리어 좌표 조정 ──
+     캐리어만 조정 가능(window.carriers). AMR은 권고만(상태머신 자율). */
+  function nearestLaneCenterX(x){
+    // 동 로컬 X → 가장 가까운 통로 중심(A1C/A2C)의 전역 X
+    const base = Math.floor(x/GW_LOCAL)*GW_LOCAL;
+    const A1C_=(typeof A1C==='number')?A1C:2.585, A2C_=(typeof A2C==='number')?A2C:7.00;
+    const lx = x - base;
+    const c = Math.abs(lx-A1C_) <= Math.abs(lx-A2C_) ? A1C_ : A2C_;
+    return { gx: base + c, aisle: c===A1C_?0:1 };
+  }
+  // 우회 동선 가능 판정: 가까운 통로 중심으로의 복귀 경로에 다른 캐리어가 막고 있나.
+  function planDetour(c){
+    const near = nearestLaneCenterX(c.x);   // 1순위 통로
+    const A1C_=(typeof A1C==='number')?A1C:2.585, A2C_=(typeof A2C==='number')?A2C:7.00;
+    const base=Math.floor(c.x/GW_LOCAL)*GW_LOCAL;
+    const cands = near.aisle===0
+      ? [{gx:near.gx,aisle:0},{gx:base+A2C_,aisle:1}]   // 1순위 통로① → 대안 통로②
+      : [{gx:near.gx,aisle:1},{gx:base+A1C_,aisle:0}];
+    for(const cand of cands){
+      // 복귀 목표 지점(같은 z) 근처에 다른 캐리어가 점유 중이면 그 통로는 막힘
+      const occupied=(window.carriers||[]).some(o=> o.id!==c.id &&
+        Math.abs(o.x-cand.gx)<1.6 && Math.abs((o.z||0)-(c.z||0))<2.5);
+      if(!occupied) return { gx:cand.gx, aisle:cand.aisle, blocked:false };
+    }
+    return { blocked:true, blocker:'양 통로 모두 다른 캐리어 점유' };
+  }
+  // 자동조치 불가 → 운영자 판단이 필요한 이슈 등록 (중복 억제)
+  function registerIssue(c, kind, detail){
+    const now=performance.now();
+    const dup = PV.issues.find(i=>i.id===c.id && i.kind===kind && now-i.t < 30000);
+    if(dup) return;
+    PV.issues.unshift({ id:c.id, kind, detail, t:now });
+    if(PV.issues.length>20) PV.issues.pop();
+  }
+  function remediate(vio){
+    // vio: {id, kind, type, detail}. 반환: {plan, applied, msg}
+    const L=LABEL;
+    if(vio.kind!=='carrier'){
+      return { plan:`${vio.id}(${vio.kind})는 자율 상태머신 제어 — 수동 개입 대신 모니터링 권고`, applied:false,
+               msg:`${vio.id}는 AMR이라 직접 조치 대신 경과를 지켜봅니다.` };
+    }
+    const c = (window.carriers||[]).find(x=>x.id===vio.id);
+    if(!c) return { plan:'대상 캐리어 미발견', applied:false, msg:`${vio.id} 객체를 찾지 못했습니다.` };
+
+    if(vio.type==='IMMINENT'){
+      // 관통 임박 → 이미 validate에서 정지(e-stop)됨. 우회 동선 가능 여부 판정.
+      const det = planDetour(c);
+      if(det.blocked){
+        registerIssue(c, 'DETOUR_BLOCKED', `${c.id} 관통 임박 정지, 우회 동선 막힘(${det.blocker}). 운영자 판단 필요.`);
+        return { plan:`관통 임박 → 정지 유지. 우회 불가(${det.blocker}) → 이슈 등록`, applied:false,
+                 msg:`${c.id}를 관통 직전 정지시켰습니다. 다만 우회 동선이 막혀(${det.blocker}) 자동 복귀가 위험합니다. 이슈로 등록했으니 운영자 확인이 필요합니다.` };
+      }
+      c.targetX = det.gx; c.aisle = det.aisle; delete PV.estopped[c.id];   // 순간이동 아님 — 정상 주행 복귀
+      return { plan:`관통 임박 정지 → 안전 우회(${det.aisle===0?'통로①':'통로②'}) 경로 설정`, applied:true,
+               msg:`${c.id}를 관통 직전 정지시킨 뒤, 비어있는 ${det.aisle===0?'통로①':'통로②'}로 우회 경로를 설정했습니다.` };
+    }
+    if(vio.type==='PENETRATION'){
+      // 예측이 못 막고 이미 관통 발생 — 즉시 정지 + 이슈. 순간복귀 금지(사고 은폐 방지).
+      c.targetX=c.x; c.targetZ=c.z; PV.estopped[c.id]=Date.now();
+      registerIssue(c, 'PENETRATION_OCCURRED', `${c.id} 구조물 관통 발생 — 즉시 정지. 물리적 사고이므로 운영자 점검 필수.`);
+      return { plan:`관통 발생 → 즉시 정지 + 이슈 등록 (순간복귀 안 함)`, applied:false,
+               msg:`${c.id}가 이미 구조물을 관통했습니다. 즉시 정지시키고 이슈로 등록했습니다. 임의 복귀는 사고를 가리므로 하지 않습니다 — 운영자 점검이 필요합니다.` };
+    }
+    if(vio.type==='OFF_LANE'){
+      // 통로 이탈(관통 아님) — 우회 가능하면 복귀, 막히면 이슈
+      const det = planDetour(c);
+      if(det.blocked){
+        registerIssue(c, 'DETOUR_BLOCKED', `${c.id} 통로 이탈, 복귀 경로 막힘(${det.blocker}). 운영자 판단 필요.`);
+        return { plan:`통로이탈 → 복귀 경로 막힘(${det.blocker}) → 이슈 등록`, applied:false,
+                 msg:`${c.id}가 통로를 벗어났는데 복귀 경로가 막혀(${det.blocker}) 자동 조치가 위험합니다. 이슈로 등록했습니다.` };
+      }
+      const fromX=c.x;
+      c.targetX = det.gx; c.aisle = det.aisle;   // 순간이동 아님 — 목표만 설정해 정상 주행 복귀
+      return { plan:`통로이탈 → ${det.aisle===0?'통로①':'통로②'}로 복귀 경로 설정`, applied:true,
+               msg:`${c.id}를 ${det.aisle===0?'통로①':'통로②'}로 복귀하도록 경로를 설정했습니다 (현재 X ${fromX.toFixed(2)}m).` };
+    }
+    if(vio.type==='TELEPORT'){
+      // 대안: 마지막 정상 좌표로 롤백
+      const g=PV._lastGood[c.id];
+      if(g){
+        c.x=g.x; c.z=g.z; c.targetX=g.x; c.targetZ=g.z;
+        if(typeof c.vis?.grp?.position?.set==='function') c.vis.grp.position.set(c.x, 0, c.z);
+        return { plan:`${L.TELEPORT} → 마지막 정상 위치로 롤백`, applied:true,
+                 msg:`${vio.id}의 비정상 순간이동을 직전 정상 위치(${g.x.toFixed(1)}, ${g.z.toFixed(1)})로 롤백했습니다.` };
+      }
+      return { plan:`${L.TELEPORT} → 롤백 기준 없음, 감속 권고`, applied:false,
+               msg:`${vio.id} 순간이동 감지 — 직전 정상 위치 기록이 없어 속도 점검을 권고합니다.` };
+    }
+    return { plan:'알 수 없는 위반', applied:false, msg:`${vio.id} ${vio.type} — 조치 규칙이 없습니다.` };
+  }
+
+  // 검증 루프 — 5fps(200ms)로 충분 (물리는 60fps지만 검증 노이즈 억제)
+  let raf;
+  function tickLoop(){
+    validate(performance.now());
+    raf=setTimeout(()=>requestAnimationFrame(tickLoop), 200);
+  }
+  // COLL/씬 초기화 직후 시작 (약간 지연)
+  setTimeout(tickLoop, 1500);
+
+  // 외부(코파일럿) 노출
+  window.__physValidator = {
+    snapshot(){ return { total:PV.violations.length, counts:{...PV.counts}, violations:PV.violations.map(x=>({...x})) }; },
+    // 최근 N초 내 위반 이력 (순간 위반인 TELEPORT도 포착). 선제경보·질의용.
+    recent(withinMs){
+      const now=performance.now(); const w=withinMs||10000;
+      return PV.log.filter(e=> now-e.t < w).map(e=>({...e}));
+    },
+    // 가장 심각한 현재 위반 1건 (조치 대상 선택)
+    topViolation(){
+      if(!PV.violations.length) return null;
+      return [...PV.violations].sort((a,b)=>(SEVERITY[b.type]||0)-(SEVERITY[a.type]||0))[0];
+    },
+    remediate,                 // (violation) → {plan, applied, msg}
+    issues(){ return PV.issues.map(x=>({...x})); },   // 운영자 판단 필요 이슈 목록
+    baseline(key){ const b=PV._base[key]; return b?{n:b.n,mean:b.mean,std:Math.sqrt(b.m2/b.n)}:null; },  // 학습 통계(디버그)
+    forecasts(){ return (PV.forecasts||[]).map(x=>({...x})); },   // 3안 예측 정비 경보(TTF)
+    label:LABEL,
+    setEnabled(b){ PV.enabled=!!b; }
+  };
+})();
+
+/* ══════════════════════════════════════════════════════════════════════
+   AI 음성 운영 코파일럿 NPC — 게임 데모식 음성 대화 + 3D 씬 리드
+   · 음성 I/O: Web Speech API (STT/TTS, 무설치)
+   · 두뇌: mock 추론(기본) → Claude API(키 입력 시) function calling
+   · 씬 제어: 기존 window.selSpan(id) 재사용 (카메라 이동+하이라이트)
+   · 컨텍스트: window.spans / window._mqttSensors (실센서 우선, mock fallback)
+   기존 코드 비침습: 전역 함수/변수만 읽고, 독립 IIFE로 캡슐화.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+  const $ = s=>document.querySelector(s);
+  const root=$('#copilot'), panel=$('#cpPanel'), logEl=$('#cpLog');
+  const txt=$('#cpText'), micBtn=$('#cpMic'), statusEl=$('#cpStatus'), toggle=$('#cpToggle');
+  let apiKey = sessionStorage.getItem('cp_anthropic_key') || '';   // 세션 한정, 평문 커밋 0 (secret-guard 준수)
+  let ttsKey = sessionStorage.getItem('cp_dashscope_key') || '';   // Qwen TTS (DashScope) — 세션 한정
+  let ttsVoice = sessionStorage.getItem('cp_tts_voice') || 'Cherry';
+  let lastAnomalyAlerted = {};   // {spanId: ts} — 같은 이상 반복 경보 방지
+
+  /* ── 씬 상태 스냅샷 (LLM 컨텍스트) ── */
+  function snapshot(){
+    const spans = window.spans || [];
+    return spans.map(s=>{
+      const live = window._mqttSensors && window._mqttSensors[s.id];
+      const fresh = live && (Date.now()-live._ts < 10000);
+      return {
+        동: s.id, 작물: s.crop && s.crop.name, 상태: s.status,
+        기온: +(+s.temp).toFixed(1), 습도: Math.round(s.hum),
+        EC: +(+s.ec).toFixed(2), 목표기온: s.crop && s.crop.tTar,
+        데이터원: fresh ? 'live' : 'mock'
+      };
+    });
+  }
+  function anomalies(){ return snapshot().filter(s=>s.상태==='warning'); }
+
+  /* ── 액션 브릿지 (LLM function calling 대상) ── */
+  const ACTIONS = {
+    focusCell({zone}){
+      const id = +zone;
+      if(!window.selSpan || !(id>=1)) return {ok:false, msg:'대상 동을 찾지 못함'};
+      window.selSpan(id);
+      const s=(window.spans||[]).find(x=>x.id===id);
+      return {ok:true, msg:`${id}동(${s?s.crop.name:''})으로 카메라 이동 + 하이라이트`};
+    },
+    highlightAnomaly(){
+      const a=anomalies();
+      if(!a.length) return {ok:true, found:0, msg:'현재 이상 상태인 동이 없습니다'};
+      window.selSpan(a[0].동);
+      return {ok:true, found:a.length, target:a[0].동, msg:`이상 동 ${a.length}곳 중 ${a[0].동}동으로 이동`};
+    },
+    overview(){
+      if(window.selSpan && window.spans && window.spans.length){
+        // 전체 조망: 첫 동 선택 해제 효과를 위해 selSpan 미사용, 안내만
+      }
+      return {ok:true, msg:'전체 현황 요약'};
+    },
+    remediatePhysics(){
+      const PVx=window.__physValidator;
+      if(!PVx) return {ok:false, msg:'물리 검증 엔진 미초기화'};
+      const v=PVx.topViolation();
+      if(!v) return {ok:true, msg:'조치할 물리 위반 없음'};
+      const r=PVx.remediate(v);
+      return {ok:r.applied, msg:r.applied?`조치: ${r.plan} — ${r.msg}`:`권고: ${r.msg}`};
+    }
+  };
+
+  /* ── 로그 출력 ── */
+  function addMsg(role, text, action){
+    const d=document.createElement('div');
+    d.className='cpMsg '+role;
+    d.textContent=text;
+    if(action){ const a=document.createElement('span'); a.className='act'; a.textContent='▶ '+action; d.appendChild(a); }
+    logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight;
+    return d;
+  }
+
+  /* ── TTS (음성 출력) — Qwen TTS(DashScope) 우선, Web Speech 폴백 ── */
+  let _audioEl=null;
+  function webSpeak(t){
+    if(!('speechSynthesis' in window)) return;
+    try{
+      speechSynthesis.cancel();
+      const u=new SpeechSynthesisUtterance(t);
+      u.lang='ko-KR'; u.rate=1.05; u.pitch=1.0;
+      const ko=speechSynthesis.getVoices().find(v=>/ko/i.test(v.lang));
+      if(ko) u.voice=ko;
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  // TTS 엔드포인트 — 직접 호출(CORS 막힐 수 있음) 또는 프록시 경유.
+  // sessionStorage 'cp_tts_proxy'에 프록시 URL 넣으면 그쪽으로 POST(권장).
+  let ttsProxy = sessionStorage.getItem('cp_tts_proxy') || '';
+  // Qwen3-TTS 엔진(모델). 기본 instruct-flash = 표현력 최신(2026-01). flash/qwen-tts로 변경 가능.
+  let ttsModel = sessionStorage.getItem('cp_tts_model') || 'qwen3-tts-instruct-flash';
+  const DASHSCOPE_URL='https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+  let _ttsWarned=false;
+  async function qwenSpeak(t){
+    // POST → output.audio.url → <audio> 재생. 실패 시 Web Speech 폴백 + 1회 진단 안내.
+    const endpoint = ttsProxy || DASHSCOPE_URL;
+    const inp = {text:t, voice:ttsVoice, language_type:'Korean', rate:(sessionStorage.getItem('cp_tts_rate')||'+10%')};
+    // instruct 계열은 표현 지시(instructions) 지원 — 차분하고 또렷한 안내 톤.
+    if(/instruct/.test(ttsModel)) inp.instructions='차분하고 또렷한 한국어로, 운영 관제 안내처럼 신뢰감 있게 말하세요.';
+    const body = JSON.stringify({model:ttsModel, input:inp});
+    const headers = ttsProxy
+      ? {'Content-Type':'application/json'}                                  // 프록시가 키 주입
+      : {'Authorization':'Bearer '+ttsKey,'Content-Type':'application/json'};// 직접 호출
+    let res;
+    try{ res=await fetch(endpoint,{method:'POST',headers,body}); }
+    catch(e){ diagnose('네트워크/CORS 차단 — 브라우저에서 DashScope 직접 호출이 막혔습니다. 프록시가 필요합니다.'); throw e; }
+    if(!res.ok){ diagnose('TTS 응답 오류 '+res.status+' — 키/리전/모델명을 확인하세요.'); throw new Error('TTS '+res.status); }
+    const data=await res.json();
+    const url=data && data.output && data.output.audio && data.output.audio.url;
+    if(!url){ diagnose('오디오 URL 없음 — 응답 형식 불일치.'); throw new Error('TTS no audio url'); }
+    if(_audioEl){ try{_audioEl.pause();}catch(e){} }
+    _audioEl=new Audio(url); _audioEl.play().catch(()=>{ diagnose('오디오 재생 실패 — 자동재생 정책 가능성.'); webSpeak(t); });
+  }
+  function diagnose(m){
+    if(_ttsWarned) return; _ttsWarned=true;
+    addMsg('sys','⚠️ Qwen TTS 실패 → 브라우저 기본 음성으로 폴백. 사유: '+m);
+  }
+  function speak(t){
+    const clean=t.replace(/[▶•·]/g,' ').trim();
+    if(!clean) return;
+    if(ttsKey || ttsProxy){ qwenSpeak(clean).catch(()=>webSpeak(clean)); }
+    else { webSpeak(clean); }
+  }
+
+  /* ── STT (음성 입력) ── */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recog=null, listening=false;
+  if(SR){
+    recog=new SR(); recog.lang='ko-KR'; recog.interimResults=false; recog.maxAlternatives=1;
+    recog.onresult=e=>{ const t=e.results[0][0].transcript; txt.value=t; handle(t); };
+    recog.onend=()=>{ listening=false; micBtn.classList.remove('rec'); };
+    recog.onerror=()=>{ listening=false; micBtn.classList.remove('rec'); };
+  } else { micBtn.title='이 브라우저는 음성인식 미지원 — 텍스트로 입력하세요'; }
+  micBtn.onclick=()=>{
+    if(!recog){ addMsg('sys','음성인식 미지원 브라우저입니다. 텍스트로 입력해 주세요.'); return; }
+    if(listening){ recog.stop(); return; }
+    try{ recog.start(); listening=true; micBtn.classList.add('rec'); }catch(e){}
+  };
+
+  /* ── mock 추론 (키 없을 때) — 의도 매칭 + 액션 결정 ── */
+  function mockBrain(q){
+    const t=q.toLowerCase();
+    const numMatch = q.match(/([1-9])\s*동/) || q.match(/\b([1-9])\b/);
+    // 물리 위반 조치 명령 (탐지 → 대안 → 실행)
+    if(/조치|해결|고쳐|복귀|시정|fix|바로\s*잡|돌려|롤백/.test(t)){
+      const PVx=window.__physValidator;
+      if(!PVx) return {reply:'물리 검증 엔진이 아직 초기화되지 않았습니다.', action:null};
+      const v=PVx.topViolation();
+      if(!v) return {reply:'현재 조치할 물리 위반이 없습니다. 모든 객체가 정상입니다.', action:null};
+      const r=PVx.remediate(v);
+      const L=PVx.label;
+      return {reply: r.applied
+        ? `${v.id}의 ${L[v.type]}을 조치했습니다. 대안: ${r.plan}. ${r.msg}`
+        : `${v.id}의 ${L[v.type]} — ${r.msg}`, action:null, _remediated:true};
+    }
+    // 물리 검증 질의
+    if(/검증|물리|관통|순간이동|통로\s*이탈|충돌|규칙\s*위반|위반/.test(t)){
+      const pv = window.__physValidator && window.__physValidator.snapshot();
+      if(!pv) return {reply:'물리 검증 엔진이 아직 초기화되지 않았습니다.', action:null};
+      if(!pv.total) return {reply:'물리 검증 결과 위반이 없습니다. 모든 캐리어·AMR가 통로 안에서 정상 주행 중입니다.', action:null};
+      const L=window.__physValidator.label;
+      const top=pv.violations[0];
+      const kinds=Object.entries(pv.counts).filter(([k,n])=>n>0).map(([k,n])=>`${L[k]} ${n}건`).join(', ');
+      return {reply:`물리 검증 위반 ${pv.total}건 감지: ${kinds}. 예: ${top.id}가 ${L[top.type]}(${top.detail}). "조치해줘"라고 하시면 자동 복귀시킵니다.`, action:null};
+    }
+    if(/이상|경고|문제|warning|위험|점검/.test(t)){
+      const a=anomalies();
+      if(!a.length) return {reply:'현재 5개 동 모두 정상 범위입니다. 이상 동이 없습니다.', action:'highlightAnomaly'};
+      const top=a[0];
+      return {reply:`이상 동이 ${a.length}곳 있습니다. ${top.동}동 ${top.작물}이 ${top.상태}(기온 ${top.기온}°C). 그 동으로 이동합니다.`, action:'highlightAnomaly'};
+    }
+    if(numMatch){
+      const id=+numMatch[1]; const s=snapshot().find(x=>x.동===id);
+      if(s) return {reply:`${id}동 ${s.작물}으로 이동합니다. 기온 ${s.기온}°C, 습도 ${s.습도}%, 상태 ${s.상태}.`, action:'focusCell', args:{zone:id}};
+    }
+    if(/요약|현황|전체|상태|어때|보고/.test(t)){
+      const a=anomalies();
+      return {reply:`5개 동 운영 중, 이상 ${a.length}곳. ${a.length?a.map(x=>x.동+'동').join(', ')+'에 주의가 필요합니다.':'전체 정상입니다.'}`, action:null};
+    }
+    return {reply:'"이상 있는 동 보여줘", "3동으로 가줘", "전체 현황" 처럼 말씀해 주세요.', action:null};
+  }
+
+  /* ── Claude API 추론 (키 입력 시) function calling ── */
+  async function claudeBrain(q){
+    const tools=[
+      {name:'focusCell', description:'특정 동(1~5)으로 카메라를 이동하고 하이라이트', input_schema:{type:'object',properties:{zone:{type:'integer',description:'동 번호 1~5'}},required:['zone']}},
+      {name:'highlightAnomaly', description:'이상(warning) 상태 동을 자동 탐지해 그 동으로 이동', input_schema:{type:'object',properties:{}}},
+      {name:'remediatePhysics', description:'가장 심각한 물리 규칙 위반(통로이탈/관통/순간이동)을 자동 조치(통로 복귀·롤백)한다. 위반을 해결하라는 요청 시 호출', input_schema:{type:'object',properties:{}}}
+    ];
+    const pv=window.__physValidator?window.__physValidator.snapshot():{total:0};
+    const sys=`너는 스마트팜 디지털트윈의 AI 운영 코파일럿 "누리"다. 운영자를 돕고 3D 화면을 리드하며, 물리/운영 규칙 위반을 조치한다.
+현재 센서 현황(JSON): ${JSON.stringify(snapshot())}
+현재 물리 위반: ${pv.total}건 ${pv.total?JSON.stringify(pv.violations):''}
+규칙: 한국어로 1~2문장 간결히. 화면 이동·물리 조치가 필요하면 반드시 tool 호출. 추측 금지, 위 데이터만 근거. 물리 위반이 있으면 먼저 대안을 말하고 remediatePhysics로 조치.`;
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'content-type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-opus-4-8',max_tokens:300,system:sys,tools,messages:[{role:'user',content:q}]})
+    });
+    if(!res.ok){ throw new Error('API '+res.status); }
+    const data=await res.json();
+    let reply='', action=null, args=null;
+    for(const block of data.content||[]){
+      if(block.type==='text') reply+=block.text;
+      if(block.type==='tool_use'){ action=block.name; args=block.input; }
+    }
+    return {reply:reply||'화면을 이동합니다.', action, args};
+  }
+
+  /* ── 통합 핸들러 ── */
+  let busy=false;
+  async function handle(q){
+    q=(q||'').trim(); if(!q||busy) return;
+    txt.value=''; addMsg('user', q); busy=true;
+    let out;
+    try{
+      out = apiKey ? await claudeBrain(q) : mockBrain(q);
+    }catch(e){
+      out = mockBrain(q); out.reply='(API 오류 — mock 추론으로 응답) '+out.reply;
+      statusEl.textContent='mock'; statusEl.className='dim';
+    }
+    let actLabel=null;
+    if(out.action && ACTIONS[out.action]){
+      const r=ACTIONS[out.action](out.args||{});
+      actLabel=r.msg;
+    }
+    addMsg('ai', out.reply, actLabel);
+    speak(out.reply);
+    busy=false;
+  }
+
+  /* ── 선제 이상 경보 (NPC가 먼저 말 건다) ── */
+  let _pvAlerted={};   // {type: ts} — 물리 위반 반복 경보 방지
+  let autoRemediate = (sessionStorage.getItem('cp_auto_fix')!=='off');   // 기본 ON (조용히 조치)
+  // 능동 발화 정책(대표님 지시 2026-06-24): 크리티컬(안전 직결)만 음성.
+  // 그 외(통로이탈·순간이동·센서이상)는 음성 자제 — 자동조치 + 화면(말풍선/패널)만.
+  // 질의 응답(운영자가 직접 물음)은 자제 대상 아님 — 항상 음성.
+  const SPEAK_TYPES = new Set(['PENETRATION','OVERLAP','IMMINENT','TIPOVER']);   // 충돌/관통임박정지 = 크리티컬 = 음성 허용
+  const PV_COOLDOWN = 300000;   // 유형당 5분 (이전 30초 → 떠듦 방지)
+  const ANOM_COOLDOWN = 180000; // 동당 3분 (이전 60초)
+  let _pendingFixes=0;          // 조용히 처리한 경미 조치 건수 (요약용)
+  let proactiveOn = (sessionStorage.getItem('cp_proactive')!=='off');   // 선제 알림 on/off
+
+  function proactiveScanPhysics(){
+    const PVx=window.__physValidator;
+    if(!PVx) return false;
+    const L=PVx.label;
+    const v = PVx.topViolation();
+    if(!v) return false;
+    const now=Date.now();
+
+    // ① 자동조치는 항상 조용히 (음성·말풍선 없음, 패널 로그에 이미 기록됨)
+    if(autoRemediate && v.kind==='carrier'){
+      const r=PVx.remediate(v);
+      if(r.applied){ _pendingFixes++; }
+    }
+
+    // ② 운영자에게 "말 거는" 건: 선제알림 ON + 중대(안전 직결) + 신규 + 쿨다운 경과일 때만
+    if(!proactiveOn) return true;   // 음소거 시 자동조치만 하고 발화 0
+    const isCritical = SPEAK_TYPES.has(v.type);
+    if(!isCritical){
+      // 경미 위반: 토글 뱃지만(조용). 떠들지 않음.
+      return true;
+    }
+    if(now-(_pvAlerted[v.type]||0) <= PV_COOLDOWN) return true;   // 5분 쿨다운
+    _pvAlerted[v.type]=now;
+    toggle.classList.add('alert');
+
+    // 패널이 닫혀 있으면 소리 강제 안 함(뱃지만). 열려 있을 때만 말풍선+음성.
+    if(root.classList.contains('open')){
+      const fixNote = _pendingFixes>0 ? ` (그 외 경미 위반 ${_pendingFixes}건은 자동 복귀시켰습니다)` : '';
+      const msg=`${v.id} ${L[v.type]} — 안전 직결 위반입니다. 확인이 필요합니다.${fixNote}`;
+      addMsg('ai', msg, `${L[v.type]} 감지`);
+      speak(msg);
+      _pendingFixes=0;
+    }
+    return true;
+  }
+  function proactiveScan(){
+    proactiveScanPhysics();   // 물리: 조용한 자동조치 + 중대건만 발화 (return 안 해 센서도 평가)
+    // 센서 이상: 선제알림 ON + 패널 열렸을 때만 + 긴 쿨다운. 닫혀 있거나 음소거면 침묵.
+    if(!proactiveOn || !root.classList.contains('open')) return;
+    const a=anomalies(); const now=Date.now();
+    for(const s of a){
+      if(now-(lastAnomalyAlerted[s.동]||0) > ANOM_COOLDOWN){
+        lastAnomalyAlerted[s.동]=now;
+        const msg=`${s.동}동 ${s.작물} ${s.상태} — 기온 ${s.기온}°C. 확인해 보시겠어요?`;
+        addMsg('ai', msg, `${s.동}동으로 이동`);
+        // 센서 이상은 크리티컬 아님 → 음성 자제, 말풍선(화면)만 (대표님 지시 2026-06-24)
+        window.__cpPendingFocus=s.동;
+        return;
+      }
+    }
+  }
+  setInterval(proactiveScan, 20000);
+
+  /* ── UI 와이어링 ── */
+  toggle.onclick=()=>{
+    root.classList.toggle('open'); toggle.classList.remove('alert');
+    if(root.classList.contains('open')){
+      txt.focus();
+      if(window.__cpPendingFocus){ ACTIONS.focusCell({zone:window.__cpPendingFocus}); window.__cpPendingFocus=null; }
+    }
+  };
+  $('#cpClose').onclick=()=>root.classList.remove('open');
+  // 선제 알림 켜기/끄기 — 운영자가 "일방적 방송"을 끌 수 있게
+  const bell=$('#cpBell');
+  function refreshBell(){ bell.textContent=proactiveOn?'🔔':'🔕'; bell.title=proactiveOn?'선제 알림 끄기':'선제 알림 켜기'; }
+  bell.onclick=()=>{
+    proactiveOn=!proactiveOn;
+    sessionStorage.setItem('cp_proactive', proactiveOn?'on':'off');
+    refreshBell();
+    addMsg('sys', proactiveOn?'선제 알림 켜짐 — 중대 위반 시에만 말합니다':'선제 알림 꺼짐 — 물어보실 때만 답합니다 (자동 조치는 계속)');
+  };
+  refreshBell();
+  $('#cpSend').onclick=()=>handle(txt.value);
+  txt.addEventListener('keydown',e=>{ if(e.key==='Enter') handle(txt.value); });
+  document.addEventListener('keydown',e=>{ if(e.altKey && (e.key==='c'||e.key==='C')){ toggle.click(); }});
+  function refreshStatus(){
+    const brain = apiKey ? 'Claude' : 'mock';
+    const voice = (ttsKey||ttsProxy) ? 'Qwen음성' : '';
+    statusEl.textContent = voice ? (brain+'·'+voice) : brain;
+    statusEl.className = (apiKey||ttsKey||ttsProxy) ? 'live' : 'dim';
+  }
+  $('#cpHint').onclick=()=>{
+    const k=prompt('Claude API 키 (sk-ant-...) — 세션에만 저장, 비우면 mock 추론. 변경 없으면 취소:', apiKey);
+    if(k!==null){
+      apiKey=k.trim();
+      if(apiKey){ sessionStorage.setItem('cp_anthropic_key',apiKey); addMsg('sys','Claude API 연결됨 (세션 한정)'); }
+      else { sessionStorage.removeItem('cp_anthropic_key'); addMsg('sys','mock 추론 모드'); }
+    }
+    // 권장: 프록시 URL (CORS 회피, 키는 서버가 보관). 예: http://localhost:9301
+    const px=prompt('Qwen TTS 프록시 URL (권장 · CORS 회피) — 예: http://localhost:9301\n비우면 브라우저 직접 호출(CORS 막힐 수 있음):', ttsProxy);
+    if(px!==null){
+      ttsProxy=px.trim();
+      if(ttsProxy){ sessionStorage.setItem('cp_tts_proxy',ttsProxy); } else { sessionStorage.removeItem('cp_tts_proxy'); }
+    }
+    // 직접 호출 시에만 키 필요 (프록시 쓰면 서버가 키 보관 → 입력 불필요)
+    if(!ttsProxy){
+      const tk=prompt('Qwen TTS (DashScope) 키 (sk-...) — 직접 호출용. 비우면 기본음성:', ttsKey);
+      if(tk!==null){
+        ttsKey=tk.trim();
+        if(ttsKey){ sessionStorage.setItem('cp_dashscope_key',ttsKey); } else { sessionStorage.removeItem('cp_dashscope_key'); }
+      }
+    }
+    if(ttsProxy || ttsKey){
+      const md=prompt('Qwen3-TTS 엔진(모델) — qwen3-tts-instruct-flash(표현력 최신) / qwen3-tts-flash / qwen-tts:', ttsModel);
+      if(md && md.trim()){ ttsModel=md.trim(); sessionStorage.setItem('cp_tts_model',ttsModel); }
+      const v=prompt('Qwen 음성(voice) 이름 — Cherry / Dylan / Ethan / Serena 등:', ttsVoice);
+      if(v && v.trim()){ ttsVoice=v.trim(); sessionStorage.setItem('cp_tts_voice',ttsVoice); }
+      _ttsWarned=false;
+      addMsg('sys','Qwen TTS 연결 시도 — 엔진 '+ttsModel+' · '+(ttsProxy?('프록시 '+ttsProxy):'직접 호출')+' · 음성 '+ttsVoice);
+      speak('안녕하세요, 누리 코파일럿입니다. 음성 연결을 확인했습니다.');
+    } else {
+      addMsg('sys','브라우저 기본 음성으로 전환');
+    }
+    refreshStatus();
+  };
+  refreshStatus();
+
+  // 테스트 훅: Playwright가 음성 없이 의도 주입 가능
+  window.__copilotAsk = handle;
+  window.__copilotSnapshot = snapshot;
+
+  addMsg('sys','AI 코파일럿 준비됨 · 🎙️ 또는 텍스트로 질문하세요');
+})();
 </script>
 </body>
 </html>
