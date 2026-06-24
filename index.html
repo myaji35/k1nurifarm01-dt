@@ -184,11 +184,18 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 .pvFcH{font-size:10.5px;font-weight:600;color:#e0b020;margin:4px 0 3px;padding-top:5px;border-top:1px solid rgba(224,176,32,.3)}
 .pvFc{font-size:11px;color:#f0dca0;padding:3px 0;line-height:1.4}
 .pvFc b{color:#e0b020}
+/* 우하단 도구 독 — hover 시 라벨 슬라이드 (3토글 일관 UX) */
+.dockBtn{position:relative}
+.dockBtn::before{content:attr(data-label);position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%);
+  white-space:nowrap;font-size:11px;font-weight:600;color:#d4ece6;background:rgba(13,22,34,.96);
+  border:1px solid rgba(46,196,182,.3);padding:4px 9px;border-radius:7px;opacity:0;pointer-events:none;transition:opacity .18s;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.dockBtn:hover::before{opacity:1}
 /* 타임라인 리플레이 */
-#tlToggle{position:fixed;right:18px;bottom:132px;z-index:60;width:44px;height:44px;border-radius:50%;
-  border:1px solid rgba(46,196,182,.5);background:#0d1622;color:#c8a0e8;font-size:19px;cursor:pointer;
-  box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}
-#tlToggle:hover{box-shadow:0 0 14px rgba(200,160,232,.4)}
+#tlToggle{position:fixed;right:21px;bottom:140px;z-index:60;width:46px;height:46px;border-radius:50%;
+  border:1px solid rgba(46,196,182,.45);background:#0d1622;color:#c8a0e8;font-size:19px;cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;transition:box-shadow .25s,transform .15s}
+#tlToggle:hover{box-shadow:0 0 14px rgba(200,160,232,.4);transform:scale(1.08)}
+#timeline.open ~ #tlToggle, #tlToggle.active{box-shadow:0 0 16px rgba(200,160,232,.55)}
 #timeline{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:61;width:min(560px,90vw);
   background:rgba(13,22,34,.98);border:1px solid rgba(46,196,182,.35);border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.6);padding:12px 16px}
 #timeline.open{display:block}
@@ -203,10 +210,11 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 #tlReadout{display:flex;gap:5px;font-size:10px;color:#9fc3ba;flex-wrap:wrap}
 .tlRd{padding:2px 7px;border-radius:7px;background:var(--rc,rgba(46,196,182,.12));color:#d4ece6}
 /* 동 평면 히트맵 */
-#hmToggle{position:fixed;right:18px;bottom:80px;z-index:60;width:44px;height:44px;border-radius:50%;
-  border:1px solid rgba(46,196,182,.5);background:#0d1622;color:#5ee0e8;font-size:20px;cursor:pointer;
-  box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}
-#hmToggle:hover{box-shadow:0 0 14px rgba(46,196,182,.4)}
+#hmToggle{position:fixed;right:21px;bottom:88px;z-index:60;width:46px;height:46px;border-radius:50%;
+  border:1px solid rgba(46,196,182,.45);background:#0d1622;color:#5ee0e8;font-size:20px;cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;transition:box-shadow .25s,transform .15s}
+#hmToggle:hover{box-shadow:0 0 14px rgba(46,196,182,.4);transform:scale(1.08)}
+#heatmap.open ~ #hmToggle{box-shadow:0 0 16px rgba(94,224,232,.55)}
 #heatmap{display:none;position:fixed;right:74px;bottom:80px;z-index:60;width:300px;
   background:rgba(13,22,34,.97);border:1px solid rgba(46,196,182,.35);border-radius:12px;
   box-shadow:0 10px 40px rgba(0,0,0,.6);padding:11px}
@@ -248,7 +256,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   <div id="hmGrid"></div>
   <div id="hmLegend"><span class="hmLg" style="--c:#2ec4b6">정상</span><span class="hmLg" style="--c:#e6c838">주의</span><span class="hmLg" style="--c:#E24B4A">위험</span></div>
 </div>
-<button id="hmToggle" title="동 평면 히트맵">🌡️</button>
+<button id="hmToggle" class="dockBtn" data-label="히트맵" title="동 평면 히트맵">🌡️</button>
 
 <!-- ═══ 타임라인 리플레이 — 상태 스냅샷 되감기 (이상 원인 분석) ═══ -->
 <div id="timeline">
@@ -256,11 +264,11 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
   <div id="tlBar"><div id="tlMarkers"></div><input id="tlSlider" type="range" min="0" max="0" value="0" step="1"></div>
   <div id="tlReadout"></div>
 </div>
-<button id="tlToggle" title="타임라인 리플레이">⏱️</button>
+<button id="tlToggle" class="dockBtn" data-label="타임라인" title="타임라인 리플레이">⏱️</button>
 
 <!-- ═══ AI 음성 운영 코파일럿 (NPC) — 게임 데모식 음성 대화+씬 리드. 단일 HTML 유지, 무설치 ═══ -->
 <div id="copilot" aria-live="polite">
-  <button id="cpToggle" title="AI 코파일럿 (Alt+C)">🤖</button>
+  <button id="cpToggle" class="dockBtn" data-label="AI 코파일럿" title="AI 코파일럿 (Alt+C)">🤖</button>
   <div id="cpPanel">
     <div id="cpHead">
       <span id="cpName">누리 · AI 운영 코파일럿</span>
@@ -473,8 +481,16 @@ window._mqttSensors = {};          // { [spanId]: {temp,hum,ec,ph, _ts} }
 window._mqttState = 'connecting';  // connecting | live | offline
 //   로컬 인증 브로커(Mosquitto, WebSocket 9001 + viewer 계정). 운영 전환 시 URL/계정만 교체.
 //   브로커 미기동 시 자동으로 mock fallback(tick의 _dataSrc 분기) — 화면 안 죽음.
-const MQTT_BROKER = 'ws://localhost:9001';
-const MQTT_AUTH   = { username: 'viewer', password: 'v13wer-poc' };
+// 브로커·자격증명: 운영 시 외부 주입 우선(URL ?broker=&mqttUser=&mqttPass= 또는 sessionStorage),
+//   미지정 시 PoC 기본값. 공개 배포본 평문 하드코딩 의존도↓ (ISS-005 선제 강화).
+//   페이지가 https면 ws→wss 자동 승격(혼합콘텐츠 차단 회피 + TLS).
+const _q = new URLSearchParams(location.search);
+const _defBroker = (location.protocol==='https:' ? 'wss' : 'ws') + '://localhost:9001';
+const MQTT_BROKER = _q.get('broker') || sessionStorage.getItem('mqtt_broker') || _defBroker;
+const MQTT_AUTH   = {
+  username: _q.get('mqttUser') || sessionStorage.getItem('mqtt_user') || 'viewer',          // read-only 구독 전용 권장
+  password: _q.get('mqttPass') || sessionStorage.getItem('mqtt_pass') || 'v13wer-poc'       // PoC 기본값 — 운영 시 반드시 교체(ISS-005)
+};
 const MQTT_TOPIC  = `dt/${ASSETS.site.id}/span/+/sensor`;   // + = 동 id 와일드카드
 try {
   const mc = mqtt.connect(MQTT_BROKER, { ...MQTT_AUTH, connectTimeout: 8000, reconnectPeriod: 4000 });
