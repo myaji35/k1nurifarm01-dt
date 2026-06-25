@@ -372,12 +372,12 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
     <!-- 통로폭 충돌 검증 모드 (DT 물리 검증) -->
     <div class="ptit env-only" style="color:#5ee0e8;margin-top:0">🛣️ 통로폭 안전성 검증</div>
     <div class="env-only" style="font-size:10px;color:#7090a0;margin-bottom:6px">
-      캐리어 폭 1.50m · 통로 전 구간 주행 시 벽 클리어런스 분석
+      캐리어 폭 1.60m · 통로 전 구간 주행 시 벽 클리어런스 분석
     </div>
     <div class="env-only" id="aisleBtns" style="display:flex;gap:4px;margin-bottom:8px">
-      <button class="aisleBtn" data-w="1.50" style="flex:1;padding:5px 0;font-size:11px;background:#0a1828;color:#8fb0a4;border:1px solid #1d3a4a;border-radius:4px;cursor:pointer">1.50m</button>
-      <button class="aisleBtn active" data-w="1.67" style="flex:1;padding:5px 0;font-size:11px;background:#0a3a34;color:#5ee0e8;border:1px solid #2a6a5a;border-radius:4px;cursor:pointer">1.67m</button>
-      <button class="aisleBtn" data-w="1.80" style="flex:1;padding:5px 0;font-size:11px;background:#0a1828;color:#8fb0a4;border:1px solid #1d3a4a;border-radius:4px;cursor:pointer">1.80m</button>
+      <button class="aisleBtn" data-w="1.60" style="flex:1;padding:5px 0;font-size:11px;background:#0a1828;color:#8fb0a4;border:1px solid #1d3a4a;border-radius:4px;cursor:pointer">1.60m</button>
+      <button class="aisleBtn active" data-w="1.75" style="flex:1;padding:5px 0;font-size:11px;background:#0a3a34;color:#5ee0e8;border:1px solid #2a6a5a;border-radius:4px;cursor:pointer">1.75m</button>
+      <button class="aisleBtn" data-w="1.90" style="flex:1;padding:5px 0;font-size:11px;background:#0a1828;color:#8fb0a4;border:1px solid #1d3a4a;border-radius:4px;cursor:pointer">1.90m</button>
     </div>
     <div class="env-only" id="aisleResult" style="font-size:11px;line-height:1.7;color:#8fb0a4;margin-bottom:10px"></div>
 
@@ -532,17 +532,18 @@ window.__physWorld = new RAPIER.World({ x:0, y:0, z:0 });   // 무중력: 검증
    Wall(0.15) | R1(0.9) | A1(2.85) | R2(0.9) | R3(0.9) | A2(2.85) | R4(0.9) | Wall(0.15) = 9.6 ✓
    ═══ */
 const GW=ASSETS.dimensions.GW, GL=ASSETS.dimensions.GL, GH=ASSETS.dimensions.GH, DR=0.50, DW=0.9;
-/* X축 레이아웃 (동폭 9.6m, 정비복도 75cm×3 + 랙4 + 통로 1.67m×2) — 2026-05-25 재설계
-   [정비복도1 0~0.75][R1 0.75~1.75][통로A 1.75~3.42][R2 3.42~4.42]
-   [정비복도2 4.42~5.17][R3 5.17~6.17][통로B 6.17~7.84][R4 7.84~8.84][정비복도3 8.84~9.59]
-   정비복도: 무중단 경정비용, 좌우 랙·벽 보호로 난간 없음. 1층+3단 중간작업대 2개 층. */
-const WALK_W=0.75;                              // 정비복도 폭
-const WALK_XC=[0.375, 4.795, 9.215];            // 정비복도 중심 X (1열좌/2-3중앙/4열우)
-const R1C=1.25,  R2C=3.92,  R3C=5.67,  R4C=8.34;  // 랙 중심 (셀 직경 1.0)
-const A1C=2.585, A2C=7.00;                      // 통로 중심
-const A1S=1.75,  A1E=3.42,  A1W=1.67;           // 통로A 시작/끝/폭
-const A2S=6.17,  A2E=7.84,  A2W=1.67;           // 통로B
-const BPLTX=4.795;                              // 중앙(2-3열) 정비복도 자리 (구 칸막이벽 → 정비복도)
+/* X축 레이아웃 (동폭 9.6m, 관리통로 0.7m×3 + 랙4 + 통로 1.75m×2) — 2026-06-25 정본 재설계
+   [관리통로1 0~0.70][R1 0.70~1.70][통로A 1.70~3.45][R2 3.45~4.45]
+   [R3 4.45~5.45][관리통로2 5.45~6.15][통로B 6.15~7.90][R4 7.90~8.90][관리통로3 8.90~9.60]
+   합산: 관리통로0.7×3(2.1) + 랙1.0×4(4.0) + 통로1.75×2(3.5) = 9.6 ✓
+   관리통로: 무정지 정비 접근로(700mm). 통로: 캐리어·AGV 주행(1750mm). */
+const WALK_W=0.70;                              // 관리통로 폭 (정본 700mm)
+const WALK_XC=[0.35, 5.80, 9.25];              // 관리통로 중심 X (1열좌/2-3사이/4열우)
+const R1C=1.20,  R2C=3.95,  R3C=4.95,  R4C=8.40;  // 랙 중심 (셀 직경 1.0)
+const A1C=2.575, A2C=7.025;                     // 통로 중심
+const A1S=1.70,  A1E=3.45,  A1W=1.75;           // 통로A 시작/끝/폭
+const A2S=6.15,  A2E=7.90,  A2W=1.75;           // 통로B
+const BPLTX=5.80;                               // 중앙(2-3열 우측) 관리통로 자리
 const RACKXC=[R1C,R2C,R3C,R4C];
 const AISLE_XC=[A1C,A2C];
 const SPAN=ASSETS.site.spanCount;
@@ -550,16 +551,19 @@ const TOTAL_W=GW*SPAN;   // 48m
 const HOUSE_X_MIN=0, HOUSE_X_MAX=TOTAL_W;
 
 const TY=[0.78,2.23,3.68,5.13];
-// 누리셀 열: 50m 하우스 → 1열 38개 (간격 1.26m, 직경 1m + 0.26 여유)
-const DZ_N=38, DZ_GAP=1.26, DZ_0=0.63;
+// 누리셀 열 (Z축 50m): 주통로3.0 + 셀구간44.0 + 주통로3.0 = 50.0 — 2026-06-25
+//   셀구간 44m에 1열 36개 (피치 1.2222m 균등, 셀 1m + 양쪽 작업간격 ~111mm).
+const DZ_N=36, DZ_GAP=1.2222, DZ_0=3.6111;
 const DZ=[];for(let i=0;i<DZ_N;i++)DZ.push(DZ_0+i*DZ_GAP);
 const NDRUM=SPAN*RACKXC.length*TY.length*DZ.length;
 
-/* Straddle Carrier 상수 — 좁은 통로(1.67m) 대응 소형화 (2026-05-25)
-   폭 1.5m: 통로 1.67m에 여유 운행. 다리 안쪽(1.5-0.36=1.14m)에서 1m 누리셀 픽업(빠듯, 직교 갠트리 수평유지). */
-const CARRIER_W=1.50;    // 폭 (X축) — 통로 1.67m 수용
-const CARRIER_L=1.80;    // 길이 (Z축, 횡단 통로 통과)
-const CARRIER_H=5.00;    // 높이 (드럼 4단 5.13m을 걸치는 높이)
+/* Straddle Carrier 상수 — 정본 외경 1.6×1.6×5.5 (2026-06-25)
+   폭 1.6m: 통로 1.75m에 여유 운행. 다리 안쪽 1.15m(외피25×2 + 기둥200×2)에서 1m 누리셀 픽업.
+   빈 AGV(1.0m)는 다리 안쪽 1.15m로 통과(좌우 75mm 여유) — 캐리어 점유 시 1대 우회 동선. */
+const CARRIER_W=1.60;    // 폭 (X축) — 통로 1.75m 수용
+const CARRIER_L=1.60;    // 길이 (Z축, 정사각 풋프린트)
+const CARRIER_H=5.50;    // 높이 (드럼 4단 5.13m을 걸치는 갠트리)
+const CARRIER_LEG_IN=1.15;  // 다리 안쪽 공간 (AGV 다리밑 통과 기준)
 const CARRIER_CLR=0xd9b020; // 노란색 (Combilift)
 const CARRIER_DARK=0x8a6e10;
 
@@ -765,7 +769,7 @@ for(let si=0;si<SPAN;si++){
   bx(.04,.02,GL,0x00aacc,ox+A2E,.03,GL/2,.7);
   for(let zi=1;zi<GL;zi+=1.8){bx(.10,.025,.10,0x009988,ox+A2C,.025,zi,.85);}
 
-  /* ── 정비복도 3개 (무중단 경정비용, 75cm) — 1열좌/2-3중앙/4열우 ──
+  /* ── 관리통로 3개 (무정지 정비용, 70cm) — 1열좌/2-3사이/4열우 ──
      1층(지상) 바닥 + 3단 높이 중간 작업대(3·4단 정비). 좌우 랙·벽 보호로 난간 없음. */
   const WALK_ELEV_Y = TY[2] - 0.3;   // 3단 작업 발판 높이 (3·4단 정비 위치)
   WALK_XC.forEach((wx, wi)=>{
@@ -1954,7 +1958,7 @@ carriers.forEach(c=>{
    목적(DT 물리 신뢰성): 상태머신이 운전하는 캐리어/AMR가 통로 안에서
    ① 정적 장애물(통로벽·랙·기둥)과 부딪히는가  ② 서로 너무 근접하는가 를
    매 tick 판정하여 화면(빨강 점멸)·KPI에 구분 표시한다.
-   캐리어 폭 1.50m vs 통로 1.67m → 좌우 여유 8.5cm. 이탈 시 즉시 간섭.
+   캐리어 폭 1.60m vs 통로 1.75m → 좌우 여유 7.5cm. 이탈 시 즉시 간섭.
    ═══════════════════════════════════════════════════════════════════ */
 const COLL = {
   enabled: true,
@@ -2016,19 +2020,19 @@ carriers.forEach(c=>{
 
 /* ═══════════════════════════════════════════════════════════════════
    통로폭 안전성 검증 분석 (비파괴) — 실제 씬 재배치 없이 Rapier 질의로 산출.
-   각 통로폭 가정 W에서: 캐리어(폭 1.5)가 통로 중심선을 따라 z=0~50 전 구간을
+   각 통로폭 가정 W에서: 캐리어(폭 1.6)가 통로 중심선을 따라 z=0~50 전 구간을
    주행할 때 좌우 클리어런스와 "안전 주행 가능 횡방향 여유(±cm)"를 계산.
-   현재 벽은 1.67m 기준으로 등록돼 있으므로, W를 바꾸면 벽 안쪽면이 (1.67-W)/2 만큼
+   현재 벽은 통로폭 A1W(1.75m) 기준으로 등록돼 있으므로, W를 바꾸면 벽 안쪽면이 (A1W-W)/2 만큼
    이동한 것과 같다 → 캐리어 중심이 가질 수 있는 횡방향 자유도를 환산.
    ═══════════════════════════════════════════════════════════════════ */
 function analyzeAisleWidth(W){
-  const half = CARRIER_W/2;          // 캐리어 반폭 0.75
+  const half = CARRIER_W/2;          // 캐리어 반폭 0.80
   const clearance = (W - CARRIER_W)/2;   // 좌우 클리어런스(m): 통로폭-캐리어폭의 절반
   const lateralFreedom = clearance;  // 중심에서 벗어날 수 있는 최대 횡편차(m)
-  // Rapier로 실측 검증: 현재 통로A(1.67) 중심 A1C에서, W 가정 시 캐리어가
+  // Rapier로 실측 검증: 현재 통로A(1.75) 중심 A1C에서, W 가정 시 캐리어가
   // 좌/우로 lateralFreedom 만큼 이동했을 때 벽 침범 여부를 샘플링(z 11점 × 좌우 끝).
   const cs = COLL.movers.find(m=>m.kind==='carrier').shape;
-  // W를 시뮬레이션하려면: 현재 벽(1.67기준)에서 캐리어가 (1.67-W)/2 만큼 더/덜 여유.
+  // W를 시뮬레이션하려면: 현재 벽(1.75기준)에서 캐리어가 (1.75-W)/2 만큼 더/덜 여유.
   //   → 캐리어를 중심 + 허용편차 위치에 놓고 현재 벽과 교차하는지로 "그 폭에서 가능한가" 판정.
   const allowedDev = clearance;       // W 통로에서 이론상 허용 편차
   // 현재 벽 기준 캐리어가 닿지 않는 실제 최대 편차를 이진탐색(통로A span0)
@@ -2038,13 +2042,13 @@ function analyzeAisleWidth(W){
     const h=window.__physWorld.intersectionWithShape({x:A1C+mid, y:0.5, z:GL/2}, _ROT, cs);
     if(h!==null && h!==undefined) hi=mid; else lo=mid;
   }
-  const realMaxDev167 = lo;           // 1.67m 통로에서 측정된 실제 우측 최대 안전 편차(m)
-  // 다른 폭 W는: 벽이 (W-1.67)/2 만큼 더 멀어짐 → 안전 편차도 그만큼 변화
-  const estMaxDev = Math.max(0, realMaxDev167 + (W-A1W)/2);
+  const realMaxDevBase = lo;          // 기준 통로폭(A1W=1.75m)에서 측정된 실제 우측 최대 안전 편차(m)
+  // 다른 폭 W는: 벽이 (W-A1W)/2 만큼 더 멀어짐 → 안전 편차도 그만큼 변화
+  const estMaxDev = Math.max(0, realMaxDevBase + (W-A1W)/2);
   const feasible = clearance >= 0;    // 폭이 캐리어보다 좁으면 물리적 불가
   return {
     W, clearance, allowedDev,
-    measuredDev167: realMaxDev167,
+    measuredDevBase: realMaxDevBase,
     estSafeDev: estMaxDev,
     feasible,
     marginCm: Math.round(clearance*100),       // 좌우 여유 cm
@@ -2058,7 +2062,7 @@ function renderAisleVerdict(W){
   const el=document.getElementById('aisleResult');
   if(!el) return;
   const verdict = !r.feasible
-    ? `<span style="color:#E24B4A">⛔ 불가 — 캐리어(1.5m)가 통로보다 넓음</span>`
+    ? `<span style="color:#E24B4A">⛔ 불가 — 캐리어(1.6m)가 통로보다 넓음</span>`
     : r.marginCm < 5
       ? `<span style="color:#E24B4A">⚠️ 위험 — 좌우 여유 ${r.marginCm}cm (정밀 주행 필수)</span>`
       : r.marginCm < 12
@@ -2068,7 +2072,7 @@ function renderAisleVerdict(W){
     `${verdict}<br>`+
     `· 좌우 클리어런스: <b style="color:#cfe">${r.marginCm}cm</b> (편측)<br>`+
     `· 안전 주행 밴드: <b style="color:#cfe">${r.safeBandCm}cm</b><br>`+
-    `· 측정(1.67m 실측 편차): <b style="color:#cfe">±${(r.measuredDev167*100).toFixed(1)}cm</b>`;
+    `· 측정(1.75m 실측 편차): <b style="color:#cfe">±${(r.measuredDevBase*100).toFixed(1)}cm</b>`;
 }
 // 버튼 이벤트
 document.querySelectorAll('.aisleBtn').forEach(b=>{
@@ -2197,7 +2201,11 @@ const AVN_STATION = {
 
 // IN_CONVEYOR, OUT_CONVEYOR는 파일 상단(CROSS_AISLE 부근)에서 선언됨 — 측면 우회로 시각화에서 z 참조
 
-const conveyorY = .42;
+/* 천정 OHT(Overhead) 컨베이어 — 2026-06-25 대표님 구상
+   바닥 컨베이어를 공중으로 올림(설비통로∩컨베이어 수직중첩). 셀≤100kg.
+   천정 7.3m / OHT 점유 1.2m → 본체 중심 Y=5.95 (캐리어 5.5 위, 랙4단 5.13 위). */
+const CEILING_H = 7.3;             // 하우스 최대 높이 (정본)
+const conveyorY = CEILING_H - 1.35;  // ≈5.95m — 천정 OHT 본체 높이
 const conveyors = [IN_CONVEYOR, OUT_CONVEYOR];
 
 conveyors.forEach((cv, ci)=>{
@@ -2240,7 +2248,7 @@ conveyors.forEach((cv, ci)=>{
   }
 
   // 라벨 (IN / OUT)
-  const lblText = isIn ? 'IN CONVEYOR · 자재 공급' : 'OUT CONVEYOR · 수확 출고';
+  const lblText = isIn ? 'IN OHT · 천정 자재 공급' : 'OUT OHT · 천정 수확 출고';
   const lblBg = isIn ? 'rgba(20,40,80,.92)' : 'rgba(80,55,15,.92)';
   const lblFg = isIn ? '#7ab0e0' : '#e0c060';
   const cv2 = document.createElement('canvas');cv2.width=320;cv2.height=44;
@@ -2266,6 +2274,28 @@ conveyors.forEach((cv, ci)=>{
     arrow.position.set(ax, conveyorY+.13, cv.z);
     scene.add(arrow);
   }
+
+  // 천정 OHT 행거 — 천정(CEILING_H)에서 컨베이어로 내려오는 지지대 (OHT 시각 핵심)
+  const hangerMat = new THREE.MeshLambertMaterial({color:0x4a5460, metalness:.3});
+  const hangerLen = CEILING_H - conveyorY;           // 천정~본체 높이차
+  for(let hx = 2; hx < GW*SPAN; hx += 4){            // 4m 간격 행거
+    [-.4, .4].forEach(zo=>{
+      const hang = new THREE.Mesh(new THREE.BoxGeometry(.06, hangerLen, .06), hangerMat);
+      hang.position.set(hx, conveyorY + hangerLen/2 + .06, cv.z + zo);
+      scene.add(hang);
+    });
+    // 행거 상단 천정 레일 클램프
+    const clamp = new THREE.Mesh(new THREE.BoxGeometry(.18, .08, 1.0), hangerMat);
+    clamp.position.set(hx, CEILING_H + .04, cv.z);
+    scene.add(clamp);
+  }
+  // 천정 레일 (Z방향 양쪽, OHT 주행 레일)
+  [-.4, .4].forEach(zo=>{
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(GW*SPAN+2, .07, .07),
+      new THREE.MeshLambertMaterial({color:0x6a7480}));
+    rail.position.set(GW*SPAN/2, CEILING_H + .04, cv.z + zo);
+    scene.add(rail);
+  });
 });
 
 /* ══════════════════════════════════════════════════════
@@ -2274,8 +2304,8 @@ conveyors.forEach((cv, ci)=>{
    ══════════════════════════════════════════════════════ */
 function buildAVN(id, label, color, zHome, zReach){
   const grp = new THREE.Group();
-  // 베이스 (셔틀 카트) — 좁은 통로(1.67m) 운행 위해 폭 1.4m로 소형화 (2026-05-25)
-  const BW = 1.4, BL = 1.3, BH = .50;
+  // 베이스 (셔틀 카트) — 정본 AGV 외경 1.0×1.0×0.8 (2026-06-25). 정사각 풋프린트, 폭=누리셀 직경 1.0
+  const BW = 1.0, BL = 1.0, BH = .80;
   const base = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, BL), new THREE.MeshLambertMaterial({color:0x2a3340}));
   base.position.y = BH/2;base.castShadow=true;grp.add(base);
   // 베이스 강조 외곽선 (테두리)
@@ -2421,7 +2451,7 @@ amrPool.forEach(a=>{
 // ── Rapier broad-phase(QBVH) 구축: 정적 콜라이더 등록 후 1회 step 필수.
 //    step 없이는 intersectionWithShape가 정적 장애물을 못 찾는다(검증으로 확인).
 window.__physWorld.step();
-renderAisleVerdict(1.67);   // 통로폭 검증 패널 초기 렌더(현재 폭)
+renderAisleVerdict(1.75);   // 통로폭 검증 패널 초기 렌더(현재 폭)
 
 // 작업 큐 — 캐리어가 요청 push, AMR이 한가하면 pop
 // req: { kind:'pickup-out'|'delivery-in', carrier, requestedAt }
