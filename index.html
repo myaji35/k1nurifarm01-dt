@@ -2234,15 +2234,50 @@ conveyors.forEach((cv, ci)=>{
     cv.rollers.push(r);
   }
 
-  // 흐르는 드럼
-  cv.beltDrums=[];
+  // OHT 비히클 (레일 주행체 + 승강 호이스트 + 그리퍼 + 매달린 누리셀)
+  cv.beltDrums=[];   // 호환: 기존 변수명 유지(이송 애니메이션이 참조)
   const beltDrumGeo = new THREE.CylinderGeometry(DR*.85, DR*.85, DW*.85, 12);
-  for(let i=0; i<5; i++){
-    const bdMat = new THREE.MeshLambertMaterial({color: i%2===0 ? cv.drumColor : (isIn?0x2a5a8a:0xb87a10)});
-    const bd = new THREE.Mesh(beltDrumGeo, bdMat);
-    bd.rotation.z = Math.PI/2;
-    bd.position.set(2 + i*6, conveyorY+.12+DR*.85, cv.z);
-    bd.castShadow=true;
+  for(let i=0; i<4; i++){
+    const veh = new THREE.Group();   // 비히클 루트 (X 주행)
+    // ① 레일 캐리지 (레일에 물린 주행체)
+    const carriage = new THREE.Mesh(new THREE.BoxGeometry(.55, .16, .9),
+      new THREE.MeshLambertMaterial({color: cv.color}));
+    carriage.position.y = CEILING_H + .12;   // 레일 위 주행
+    veh.add(carriage);
+    // 레일 휠 (양쪽)
+    const whlGeo = new THREE.CylinderGeometry(.08,.08,.06,8);
+    const whlMat = new THREE.MeshLambertMaterial({color:0x1a2028});
+    [-.35,.35].forEach(zo=>{[-.2,.2].forEach(xo=>{
+      const w=new THREE.Mesh(whlGeo,whlMat); w.rotation.x=Math.PI/2;
+      w.position.set(xo, CEILING_H+.06, zo); veh.add(w);
+    });});
+    // ② 호이스트 윈치 박스
+    const winch = new THREE.Mesh(new THREE.BoxGeometry(.3,.2,.4),
+      new THREE.MeshLambertMaterial({color:0x3a4450}));
+    winch.position.y = CEILING_H - .05; veh.add(winch);
+    // ③ 승강 어셈블리 (호이스트 케이블 + 그리퍼 + 누리셀) — Y를 애니메이션
+    const lift = new THREE.Group();
+    // 호이스트 케이블 2가닥
+    const cableMat = new THREE.MeshLambertMaterial({color:0x202830});
+    [-.16,.16].forEach(xo=>{
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(.012,.012,1,6), cableMat);
+      cable.position.set(xo, .5, 0); cable.name='cable'; lift.add(cable);
+    });
+    // 그리퍼 (집게)
+    const gripMat = new THREE.MeshLambertMaterial({color:0x5a6470});
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(.4,.08,.5), gripMat);
+    grip.position.y = 0; lift.add(grip);
+    // 매달린 누리셀 (드럼)
+    const bdMat = new THREE.MeshLambertMaterial({color: cv.drumColor});
+    const drum = new THREE.Mesh(beltDrumGeo, bdMat);
+    drum.rotation.z = Math.PI/2;
+    drum.position.y = -.28 - DR*.85;
+    drum.castShadow=true; lift.add(drum);
+    lift.position.y = CEILING_H - .25;   // 평소 천정 근처 (승강 시 하강)
+    veh.add(lift);
+    veh.userData = { lift, baseLiftY: CEILING_H - .25, phase: i/4 };  // 호이스트 제어용
+    const bd = veh;   // 호환 변수
+    bd.position.set(2 + i*7, 0, cv.z);   // X 주행 위치 (Y는 내부에서 처리)
     scene.add(bd);
     cv.beltDrums.push(bd);
   }
@@ -2495,6 +2530,11 @@ function uc(){
   cam.lookAt(tgt);
 }
 uc();
+if(new URLSearchParams(location.search).get('dbg')==='1'){  // 검증 전용 카메라 훅
+  window.__tgt=tgt; window.__cam=cam;
+  window.__setCam=(t,p,r)=>{th=t;ph=p;rad=r;uc();};
+  window.__stop=()=>{spin=false; let m=setTimeout(()=>{},0); for(let i=0;i<m;i++){clearTimeout(i);clearInterval(i);} window._focusedCarrierId=null;};
+}
 
 /* ══════════════════════════════════════════════════════
    조정실(cockpit) — 캐리어 운전석 1인칭 다중 뷰
@@ -2643,14 +2683,28 @@ function loop(ts){
   }
   dt2+=dt;if(dt2>2.2){dt2=0;tick();}
 
-  /* 양쪽 컨베이어 애니메이션 — 누리셀 자세 고정, 평행 이동만, paused 시 정지 */
+  /* 천정 OHT 애니메이션 — 비히클 레일 주행(X) + 주기적 승강 호이스트(Y), paused 시 정지 */
   conveyors.forEach(cv=>{
-    if(cv.paused) return;  // 인터록: AMR 인계 중이면 정지
+    if(cv.paused) return;  // 인터록: 인계 중이면 정지
     cv.rollers.forEach(r=>{r.rotation.y += dt*4.5*cv.dirSign;});
-    cv.beltDrums.forEach(bd=>{
-      bd.position.x += dt * .8 * cv.dirSign;
-      if(cv.dirSign>0 && bd.position.x > GW*SPAN + 1.5) bd.position.x = -.5;
-      if(cv.dirSign<0 && bd.position.x < -.5) bd.position.x = GW*SPAN + 1.5;
+    cv.beltDrums.forEach(veh=>{
+      // ① 레일 주행 (X축)
+      veh.position.x += dt * .9 * cv.dirSign;
+      if(cv.dirSign>0 && veh.position.x > GW*SPAN + 1.5) veh.position.x = -.5;
+      if(cv.dirSign<0 && veh.position.x < -.5) veh.position.x = GW*SPAN + 1.5;
+      // ② 승강 호이스트 — 주행 위치에 따라 사인파로 내렸다 올림 (랙 픽&플레이스 표현)
+      const ud = veh.userData;
+      if(ud && ud.lift){
+        // 하우스 폭 구간(각 span 중앙)을 지날 때 하강하는 주기
+        const cyc = (veh.position.x / GW + ud.phase) % 1;       // 0~1 주기
+        const dip = Math.max(0, Math.sin(cyc * Math.PI*2));      // 0~1 (양의 반파만 하강)
+        const dropDepth = (CEILING_H - 1.6);                     // 천정~랙상단 부근까지
+        ud.lift.position.y = ud.baseLiftY - dip * dropDepth;
+        // 케이블 길이 늘이기 (시각)
+        ud.lift.children.forEach(ch=>{
+          if(ch.name==='cable'){ ch.scale.y = 1 + dip * dropDepth; ch.position.y = .5 + dip*dropDepth*.5; }
+        });
+      }
     });
   });
 
