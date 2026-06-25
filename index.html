@@ -550,7 +550,7 @@ const SPAN=ASSETS.site.spanCount;
 const TOTAL_W=GW*SPAN;   // 48m
 const HOUSE_X_MIN=0, HOUSE_X_MAX=TOTAL_W;
 
-const TY=[0.78,2.23,3.68,5.13];
+const TY=[0.5,2.0,3.5,5.0];   // 셀 4단 중심 (1단높이 1500mm 정본, 셀중심=단바닥+0.5) — 2026-06-25
 // 누리셀 열 (Z축 50m): 주통로3.0 + 셀구간44.0 + 주통로3.0 = 50.0 — 2026-06-25
 //   셀구간 44m에 1열 36개 (피치 1.2222m 균등, 셀 1m + 양쪽 작업간격 ~111mm).
 const DZ_N=36, DZ_GAP=1.2222, DZ_0=3.6111;
@@ -770,21 +770,36 @@ for(let si=0;si<SPAN;si++){
   for(let zi=1;zi<GL;zi+=1.8){bx(.10,.025,.10,0x009988,ox+A2C,.025,zi,.85);}
 
   /* ── 관리통로 3개 (무정지 정비용, 70cm) — 1열좌/2-3사이/4열우 ──
-     1층(지상) 바닥 + 3단 높이 중간 작업대(3·4단 정비). 좌우 랙·벽 보호로 난간 없음. */
-  const WALK_ELEV_Y = TY[2] - 0.3;   // 3단 작업 발판 높이 (3·4단 정비 위치)
+     1층(지상): 1·2단 셀 관리. 2층(3.0m=셀 2단 위): 3·4단 셀 관리.
+     1↔2층 계단으로 오르내림. 좌우 랙·벽 보호로 난간 없음. (2026-06-25 정본) */
+  const WALK_ELEV_Y = 3.0;   // 2층 발판 = 셀 2단 위(1500×2). 3·4단 작업 위치
   WALK_XC.forEach((wx, wi)=>{
-    // 1층 바닥 정비복도 (그레이팅 색)
+    // 1층 바닥 (그레이팅 색) — 1·2단 관리
     bx(WALK_W, .035, GL, 0x3a4452, ox+wx, .02, GL/2, .92);
-    // 복도 경계 라인 (옅은 청록)
+    // 1층 복도 경계 라인 (옅은 청록)
     bx(.03,.02,GL,0x5a7a8a, ox+wx-WALK_W/2, .04, GL/2,.6);
     bx(.03,.02,GL,0x5a7a8a, ox+wx+WALK_W/2, .04, GL/2,.6);
-    // 3단 중간 작업대 (elevated walkway) — 그레이팅 발판
+    // 2층 발판 (elevated walkway, 3.0m) — 3·4단 관리
     bx(WALK_W, .04, GL, 0x46525e, ox+wx, WALK_ELEV_Y, GL/2, .55);
-    // 작업대 지지 기둥 (일정 간격)
+    // 2층 발판 지지 기둥 (일정 간격)
     for(let zi=4; zi<GL; zi+=8){
       bx(.06, WALK_ELEV_Y, .06, 0x2a3340, ox+wx-WALK_W/2+.05, WALK_ELEV_Y/2, zi, .7);
       bx(.06, WALK_ELEV_Y, .06, 0x2a3340, ox+wx+WALK_W/2-.05, WALK_ELEV_Y/2, zi, .7);
     }
+    // 1↔2층 계단 (각 관리통로 양 끝 2곳) — 폭 0.7 안, Z방향 경사 스텝
+    [GL*0.12, GL*0.88].forEach(stZ=>{
+      const STEPS=8, stepRise=WALK_ELEV_Y/STEPS, stepRun=0.28;
+      for(let s=0;s<STEPS;s++){
+        // 디딤판 (위로 갈수록 Z로 전진)
+        bx(WALK_W*0.7, .03, stepRun, 0x5a6470,
+           ox+wx, stepRise*(s+1), stZ + s*stepRun*(stZ<GL/2?1:-1), .65);
+      }
+      // 계단 측면 난간(레일)
+      const railLen=Math.hypot(WALK_ELEV_Y, STEPS*stepRun);
+      const rail=bx(.04, .04, railLen, 0x7a8a96, ox+wx, WALK_ELEV_Y/2+.4,
+                    stZ + (STEPS*stepRun/2)*(stZ<GL/2?1:-1), .7);
+      rail.rotation.x = Math.atan2(WALK_ELEV_Y, STEPS*stepRun)*(stZ<GL/2?-1:1);
+    });
   });
 
   /* 랙 프레임 */
@@ -2434,7 +2449,8 @@ const amrVis = _amrDefs.map(d =>
 // AMR 초기 위치 — 담당 캐리어 통로 근처 분산 (이후 캐리어 추종)
 //   캐리어 spawn X좌표를 그대로 재사용 (assets.json carriers와 일관, id 하드코딩 제거)
 const _aisleXOf = Object.fromEntries(ASSETS.carriers.map(c=>[c.id, _carrierSpawn[c.spawn].x]));
-const amrHomeXs = _amrDefs.map((d,i)=> _aisleXOf[d.carrier] + ((i%4)-1.5)*0.7);
+// 홈 정렬 간격 1.1m (AGV폭 1.0 + 여유 0.1) — 0.7이면 1.0폭과 겹침 (2026-06-25 수정)
+const amrHomeXs = _amrDefs.map((d,i)=> _aisleXOf[d.carrier] + ((i%4)-1.5)*1.1);
 amrVis.forEach((v, i)=>{
   v.grp.position.set(amrHomeXs[i], 0, CROSS_AISLE_Z);
 });
@@ -2531,7 +2547,7 @@ function uc(){
 }
 uc();
 if(new URLSearchParams(location.search).get('dbg')==='1'){  // 검증 전용 카메라 훅
-  window.__tgt=tgt; window.__cam=cam;
+  window.__tgt=tgt; window.__cam=cam; window.__scene=scene;
   window.__setCam=(t,p,r)=>{th=t;ph=p;rad=r;uc();};
   window.__stop=()=>{spin=false; let m=setTimeout(()=>{},0); for(let i=0;i<m;i++){clearTimeout(i);clearInterval(i);} window._focusedCarrierId=null;};
 }
