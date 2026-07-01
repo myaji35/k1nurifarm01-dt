@@ -62,17 +62,35 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 .bfill.low{background:linear-gradient(90deg,#EF9F27,#E24B4A)}
 #ctr{flex:1;position:relative;overflow:hidden;background:#020608}
 #ctr canvas{display:block;width:100%!important;height:100%!important}
-/* 물류 흐름(flow) 2D 탑다운 오버레이 */
-#flowCanvas{position:absolute;inset:0;display:none!important;z-index:6;background:#03080f;width:100%!important;height:100%!important}
-#flowCanvas.on{display:block!important}
+/* 물류 흐름(flow) 처리량 게이지 — 3D 씬 위 좌상단 오버레이 */
+#flowGauge{position:absolute;left:16px;top:14px;display:none;z-index:8;pointer-events:none;
+  background:linear-gradient(160deg,rgba(10,24,38,.94),rgba(7,19,32,.94));border:1px solid rgba(29,158,117,.3);
+  border-radius:10px;padding:12px 16px;min-width:236px;backdrop-filter:blur(4px)}
+#flowGauge.on{display:block}
+#flowGauge .fgTitle{font-size:12px;font-weight:700;color:#cfe;margin-bottom:8px}
+#flowGauge .fgRow{display:flex;justify-content:space-between;font-size:11px;color:#8fb0a4;margin:3px 0}
+#flowGauge .fgRow b{color:#cfe;font-variant-numeric:tabular-nums}
+#flowGauge .fgTrack{height:7px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin-top:8px}
+#flowGauge .fgFill{height:100%;border-radius:4px;transition:width .4s}
+#flowGauge .fgVerdict{font-size:11px;font-weight:600;margin-top:6px}
 /* 종합(overview) 약식 카드 그리드 */
 #overviewGrid{position:absolute;inset:0;display:none;z-index:7;background:#02060c;padding:14px;box-sizing:border-box;grid-gap:10px;overflow:auto}
 #overviewGrid.on{display:grid}
 .ovCard{background:linear-gradient(160deg,#0a1826,#071320);border:1px solid rgba(29,158,117,.28);border-radius:10px;padding:12px 14px;cursor:pointer;transition:all .16s;display:flex;flex-direction:column;gap:6px;min-height:0}
 .ovCard:hover{border-color:rgba(94,224,232,.6);transform:translateY(-2px)}
-.ovCard .ovTitle{font-size:13px;font-weight:700;color:#cfe;display:flex;align-items:center;gap:6px}
-.ovCard .ovBody{font-size:12px;line-height:1.7;color:#8fb0a4}
-.ovCard .ovBadge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;align-self:flex-start}
+.ovCard .ovTitle{font-size:13px;font-weight:700;color:#cfe;display:flex;align-items:center;gap:8px}
+.ovCard .ovBody{font-size:12px;line-height:1.7;color:#8fb0a4;display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.ovCard .ovBadge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;margin-left:auto}
+/* 미니 지표 */
+.ovStats{display:flex;gap:14px}
+.ovStat{display:flex;flex-direction:column}
+.ovStat .ovSv{font-size:20px;font-weight:700;line-height:1.1}
+.ovStat .ovSl{font-size:10px;color:#6a9a8a;margin-top:2px}
+.ovMetric{display:flex;align-items:center;gap:8px;font-size:11px}
+.ovMetric .ovMk{color:#6a9a8a;min-width:64px}
+.ovMetric .ovTrack{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.ovMetric .ovFill{display:block;height:100%;border-radius:4px;transition:width .3s}
+.ovMetric .ovMv{color:#cfe;min-width:32px;text-align:right;font-variant-numeric:tabular-nums}
 .ovBadge.ok{background:rgba(57,217,138,.16);color:#5ee0a0}
 .ovBadge.warn{background:rgba(239,159,39,.16);color:#efb050}
 .ovBadge.crit{background:rgba(226,75,74,.18);color:#ff8080}
@@ -383,7 +401,7 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
       <div id="hvacRows"></div>
     </div>
   </div>
-  <div id="ctr"><div id="cockpitHud"></div><canvas id="flowCanvas"></canvas><div id="overviewGrid"></div></div>
+  <div id="ctr"><div id="cockpitHud"></div><div id="flowGauge"></div><div id="overviewGrid"></div></div>
   <div id="rp">
     <!-- 통로폭 충돌 검증 모드 (DT 물리 검증) -->
     <div class="ptit env-only" style="color:#5ee0e8;margin-top:0">🛣️ 통로폭 안전성 검증</div>
@@ -792,6 +810,7 @@ const sideAisleLabel = (()=>{
 
 /* ── 5동 구조 ── */
 const edgeRefs=[];
+const rackFrameRefs=[];   // 랙 프레임 mesh (flow 뷰에서 숨김용)
 for(let si=0;si<SPAN;si++){
   const ox=si*GW;
   const isWarn=si===2;
@@ -848,10 +867,10 @@ for(let si=0;si<SPAN;si++){
     });
   });
 
-  /* 랙 프레임 */
+  /* 랙 프레임 (rackFrameRefs에 수집 → flow 뷰에서 숨김) */
   RACKXC.forEach(rc=>{
-    [.2,GL-.2].forEach(rz=>bx(.05,GH-.2,.05,0x183525,ox+rc,( GH-.2)/2,rz,.7));
-    TY.forEach(ty=>bx(DW-.04,.04,GL-.3,0x183525,ox+rc,ty+DR+.04,GL/2,.6));
+    [.2,GL-.2].forEach(rz=>rackFrameRefs.push(bx(.05,GH-.2,.05,0x183525,ox+rc,( GH-.2)/2,rz,.7)));
+    TY.forEach(ty=>rackFrameRefs.push(bx(DW-.04,.04,GL-.3,0x183525,ox+rc,ty+DR+.04,GL/2,.6)));
   });
 }
 
@@ -3689,12 +3708,11 @@ function loop(ts){
     ren.setViewport(0, 0, w, h);   // 다른 뷰 복귀 대비 전체 뷰포트 원복
     labelRen.domElement.style.display='none';   // 3분할에선 라벨 숨김
   }else if(currentView==='flow'){
-    // 물류 흐름: 3D 렌더 생략, 2D 탑다운 canvas만 매 프레임 갱신
-    if(FLOW.canvas && (FLOW.canvas.width!==FLOW.canvas.clientWidth || FLOW.canvas.height!==FLOW.canvas.clientHeight)){
-      FLOW.canvas.width=FLOW.canvas.clientWidth; FLOW.canvas.height=FLOW.canvas.clientHeight;
-    }
-    renderFlowCanvas();
-    labelRen.domElement.style.display='none';
+    // 물류 흐름: 기존 3D 씬 그대로 렌더(랙·적재셀만 숨김). 이동체 위 속도 오버레이 갱신.
+    updateFlowOverlay();           // 캐리어·AGV 라벨(속도/상태) + 처리량 게이지 갱신
+    composer.render();
+    labelRen.domElement.style.display='';
+    labelRen.render(scene,cam);
   }else if(currentView==='overview'){
     labelRen.domElement.style.display='none';   // 종합은 HTML 카드만(3D 미렌더)
   }else{
@@ -4195,14 +4213,23 @@ tick();
    물류 흐름 뷰(flow) + 종합 대시보드(overview) — 비침습 신설
    기존 3D 씬/상태머신 0줄 수정. read-only 데이터만 참조.
    ══════════════════════════════════════════════════════ */
-const FLOW = {
-  canvas:null, ctx:null,
-  trails:{},                 // id → [{x,z,t}...] 최근 위치
-  heat:[],                   // 병목 히트 누적 셀 (감쇠)
-  HEAT_CELL:1.5,             // 히트맵 격자 크기(m)
-  cycleDayInput:25,          // 재배주기(일) — 처리량 목표 산출용
-  _prev:{}                   // id → {x,z,t} 직전 위치(속도 산출)
-};
+const FLOW = { cycleDayInput:25, _prev:{}, indicators:{}, heat:[], layer:null };   // 재배주기 + 속도/병목 상태
+
+// flow 전용 3D 레이어: 이동체 위 속도 발광 링 + 병목 바닥 마커 (평시 숨김)
+(function initFlowLayer(){
+  const L = new THREE.Group(); L.visible=false; scene.add(L); FLOW.layer=L;
+})();
+// 이동체 목록(캐리어 가동분 + AMR)
+function flowMovers(){
+  const arr=[];
+  carriers.forEach(c=>{ if(!(c.id==='C-03'&&c.state===4)) arr.push({id:c.id,obj:c,kind:'carrier'}); });
+  if(typeof amrPool!=='undefined') amrPool.forEach(a=>arr.push({id:a.id,obj:a,kind:'amr'}));
+  return arr;
+}
+// 속도 → 색상 (초록 빠름 / 노랑 느림 / 빨강 정지)
+function flowSpeedHex(v){
+  if(v<0.08) return 0xe24b4a; if(v<0.5) return 0xefb050; return 0x39d98a;
+}
 // 재배주기 기반 하루 목표 (dt-throughput-sim 틀). NDRUM/HARVEST_DAY 참조.
 function flowDailyTarget(){
   const total = (typeof NDRUM!=='undefined') ? NDRUM : 2880;
@@ -4218,144 +4245,119 @@ function flowCurrentPace(){
   const perHour = (3600/avgCycle) * n;       // 가동 캐리어 수 반영 시간당
   return { avgCycle, perHour, perDay: perHour*20 };  // 20h 가동 기준
 }
-// 속도 → 색상 (초록 빠름 / 노랑 느림 / 빨강 정지)
-function flowSpeedColor(v){
-  const vmax=2.0;                            // 캐리어 최대 ~2m/s
-  const t=Math.max(0,Math.min(1, v/vmax));
-  if(t<0.05) return '#e24b4a';               // 정지
-  if(t<0.4)  return '#efb050';               // 느림
-  return '#39d98a';                          // 빠름
-}
-function flowWorldToPx(x, z, w, h){
-  // 월드 x:[0, GW*SPAN], z:[0, GL] → canvas. 여백 8%.
-  const WX = GW*SPAN, WZ = GL, m=0.08;
-  const px = m*w + (x/WX)*(1-2*m)*w;
-  const pz = m*h + (z/WZ)*(1-2*m)*h;
-  return [px, pz];
-}
-function renderFlowCanvas(){
-  const cv=FLOW.canvas, ctx=FLOW.ctx; if(!cv||!ctx) return;
-  const w=cv.width, h=cv.height, now=performance.now();
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle='#03080f'; ctx.fillRect(0,0,w,h);
-  // ── 통로/바닥 윤곽선만 희미하게 (랙·셀·건물 제외) ──
-  ctx.strokeStyle='rgba(90,140,150,.18)'; ctx.lineWidth=1;
-  for(let s=0;s<SPAN;s++){
-    [A1C,A2C].forEach(ax=>{
-      const [x0,z0]=flowWorldToPx(s*GW+ax, 0, w, h);
-      const [x1,z1]=flowWorldToPx(s*GW+ax, GL, w, h);
-      ctx.beginPath(); ctx.moveTo(x0,z0); ctx.lineTo(x1,z1); ctx.stroke();
+// 물류 흐름 오버레이: 3D 씬(랙 숨김) 위 ① 이동체 속도 발광 링 ② 병목 바닥 마커 ③ 처리량 게이지.
+function updateFlowOverlay(){
+  const now=performance.now();
+  // ── ① 이동체 속도 링 + ② 병목 히트 ──
+  if(FLOW.layer){
+    const RING=new THREE.RingGeometry(0.9,1.25,20);
+    flowMovers().forEach(m=>{
+      const o=m.obj, id=m.id;
+      const pv=FLOW._prev[id]; let v=0;
+      if(pv){ const dt=(now-pv.t)/1000; if(dt>0) v=Math.hypot(o.x-pv.x, o.z-pv.z)/dt; }
+      FLOW._prev[id]={x:o.x, z:o.z, t:now};
+      // 속도 링 (이동체 발밑 바닥에 발광 링)
+      let ring=FLOW.indicators[id];
+      if(!ring){
+        ring=new THREE.Mesh(RING, new THREE.MeshBasicMaterial({color:0x39d98a, transparent:true, opacity:.85, side:THREE.DoubleSide}));
+        ring.rotation.x=-Math.PI/2; FLOW.layer.add(ring); FLOW.indicators[id]=ring;
+      }
+      ring.position.set(o.x, 0.06, o.z);
+      const hex=flowSpeedHex(v); ring.material.color.setHex(hex);
+      ring.scale.setScalar(m.kind==='carrier'?1.15:0.7);
+      // 병목: 정지·저속이 작업 중일 때 바닥 히트 누적
+      const working = (o.state>=1);
+      if(v<0.12 && working){
+        let hc=FLOW.heat.find(e=>Math.abs(e.x-o.x)<1.2 && Math.abs(e.z-o.z)<1.2);
+        if(!hc){ hc={x:o.x, z:o.z, v:0, mesh:null}; FLOW.heat.push(hc); }
+        hc.v=Math.min(1, hc.v+0.04);
+      }
     });
+    // 병목 마커 렌더/감쇠
+    FLOW.heat.forEach(hc=>{
+      hc.v*=0.985;
+      if(!hc.mesh){
+        hc.mesh=new THREE.Mesh(new THREE.CircleGeometry(1.6,24), new THREE.MeshBasicMaterial({color:0xe24b4a, transparent:true, opacity:0, side:THREE.DoubleSide}));
+        hc.mesh.rotation.x=-Math.PI/2; hc.mesh.position.set(hc.x,0.04,hc.z); FLOW.layer.add(hc.mesh);
+      }
+      hc.mesh.material.opacity = 0.45*hc.v;
+      hc.mesh.scale.setScalar(1+hc.v*0.8);
+    });
+    // 소멸된 병목 정리
+    FLOW.heat = FLOW.heat.filter(hc=>{ if(hc.v<0.02){ if(hc.mesh){FLOW.layer.remove(hc.mesh); hc.mesh.geometry.dispose(); hc.mesh.material.dispose();} return false;} return true; });
   }
-  // 횡단통로 라인
-  ctx.strokeStyle='rgba(90,140,150,.12)';
-  const [cx0,cz0]=flowWorldToPx(0, CROSS_AISLE_Z, w, h);
-  const [cx1,cz1]=flowWorldToPx(GW*SPAN, CROSS_AISLE_Z, w, h);
-  ctx.beginPath(); ctx.moveTo(cx0,cz0); ctx.lineTo(cx1,cz1); ctx.stroke();
-
-  // ── 이동체 수집 (캐리어 + AMR) ──
-  const movers=[];
-  carriers.forEach(c=>{ if(c.id!=='C-03'||c.state!==4) movers.push({id:c.id, x:c.x, z:c.z, kind:'carrier', state:c.state, hasDrum:c.carrying}); });
-  if(typeof amrPool!=='undefined') amrPool.forEach(a=>movers.push({id:a.id, x:a.x, z:a.z, kind:'amr', state:a.state, hasDrum:a.hasDrum}));
-
-  // ── 병목 히트 감쇠 ──
-  FLOW.heat.forEach(hc=>hc.v*=0.96);
-  FLOW.heat = FLOW.heat.filter(hc=>hc.v>0.02);
-
-  // ── 각 이동체: 속도 산출 + trail + 정지 시 히트 누적 ──
-  movers.forEach(m=>{
-    const pv=FLOW._prev[m.id];
-    let v=0;
-    if(pv){ const dt=(now-pv.t)/1000; if(dt>0) v=Math.hypot(m.x-pv.x, m.z-pv.z)/dt; }
-    FLOW._prev[m.id]={x:m.x, z:m.z, t:now};
-    // trail 기록
-    const tr=FLOW.trails[m.id]||(FLOW.trails[m.id]=[]);
-    tr.push({x:m.x, z:m.z}); if(tr.length>14) tr.shift();
-    // 정지·저속이면 히트 누적 (병목)
-    if(v<0.15 && (m.state>=1)){
-      const gx=Math.round(m.x/FLOW.HEAT_CELL), gz=Math.round(m.z/FLOW.HEAT_CELL);
-      let hc=FLOW.heat.find(e=>e.gx===gx&&e.gz===gz);
-      if(!hc){ hc={gx,gz,v:0}; FLOW.heat.push(hc); }
-      hc.v=Math.min(1, hc.v+0.05);
-    }
-    m._v=v;
-  });
-  // ── 히트존 렌더 (빨간 음영) ──
-  FLOW.heat.forEach(hc=>{
-    const [hx,hz]=flowWorldToPx(hc.gx*FLOW.HEAT_CELL, hc.gz*FLOW.HEAT_CELL, w, h);
-    const r=Math.max(10, (FLOW.HEAT_CELL/GL)*h*1.4);
-    const g=ctx.createRadialGradient(hx,hz,0,hx,hz,r);
-    g.addColorStop(0,`rgba(226,75,74,${0.5*hc.v})`); g.addColorStop(1,'rgba(226,75,74,0)');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(hx,hz,r,0,7); ctx.fill();
-  });
-  // ── trail 렌더 ──
-  movers.forEach(m=>{
-    const tr=FLOW.trails[m.id]; if(!tr||tr.length<2) return;
-    ctx.strokeStyle=flowSpeedColor(m._v); ctx.lineWidth=2; ctx.globalAlpha=0.5;
-    ctx.beginPath();
-    tr.forEach((p,i)=>{ const [px,pz]=flowWorldToPx(p.x,p.z,w,h); i?ctx.lineTo(px,pz):ctx.moveTo(px,pz); });
-    ctx.stroke(); ctx.globalAlpha=1;
-  });
-  // ── 이동체 마커 + 라벨 ──
-  movers.forEach(m=>{
-    const [px,pz]=flowWorldToPx(m.x,m.z,w,h);
-    const col=flowSpeedColor(m._v);
-    ctx.fillStyle=col;
-    if(m.kind==='carrier'){ ctx.fillRect(px-7,pz-7,14,14); }        // 캐리어=사각
-    else { ctx.beginPath(); ctx.moveTo(px,pz-6); ctx.lineTo(px+6,pz+5); ctx.lineTo(px-6,pz+5); ctx.closePath(); ctx.fill(); } // AMR=삼각
-    if(m.hasDrum){ ctx.strokeStyle='#ff8c30'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px,pz,10,0,7); ctx.stroke(); }
-    // 라벨: id + 속도
-    ctx.fillStyle='#cfe'; ctx.font='10px monospace';
-    ctx.fillText(`${m.id} ${m._v.toFixed(1)}`, px+9, pz-8);
-  });
-  // ── 처리량 게이지 (좌상단) ──
+  // ── ③ 처리량 게이지 HTML ──
+  const g=document.getElementById('flowGauge'); if(!g) return;
   const target=flowDailyTarget(), pace=flowCurrentPace();
-  ctx.fillStyle='rgba(3,8,15,.85)'; ctx.fillRect(10,10,262,84);
-  ctx.strokeStyle='rgba(29,158,117,.4)'; ctx.strokeRect(10,10,262,84);
-  ctx.fillStyle='#cfe'; ctx.font='12px monospace';
-  ctx.fillText(`처리량 (재배주기 ${FLOW.cycleDayInput}일)`, 20, 30);
-  ctx.fillStyle='#8fb0a4'; ctx.font='11px monospace';
-  ctx.fillText(`하루 목표: ${target.toFixed(0)}셀`, 20, 48);
-  if(pace){
-    const ratio=pace.perDay/target;
-    const col = ratio>=1.5?'#39d98a' : ratio>=1?'#efb050' : '#e24b4a';
-    ctx.fillStyle=col;
-    ctx.fillText(`현재 페이스: ${pace.perDay.toFixed(0)}셀/일 (${ratio.toFixed(1)}배)`, 20, 66);
-    ctx.fillText(ratio>=1?'✓ 목표 달성 페이스':'⚠ 목표 미달 페이스', 20, 82);
-  }else{
-    ctx.fillStyle='#8fb0a4'; ctx.fillText('페이스 측정 중…', 20, 66);
+  if(!g._t || now-g._t>500){   // 0.5s마다 갱신(과도 리페인트 방지)
+    g._t=now;
+    let inner=`<div class="fgTitle">🚚 처리량 (재배주기 ${FLOW.cycleDayInput}일)</div>`;
+    inner+=`<div class="fgRow"><span>하루 목표</span><b>${target.toFixed(0)}셀</b></div>`;
+    if(pace){
+      const ratio=pace.perDay/target;
+      const col=ratio>=1.5?'#39d98a':ratio>=1?'#efb050':'#e24b4a';
+      inner+=`<div class="fgRow"><span>현재 페이스</span><b style="color:${col}">${pace.perDay.toFixed(0)}셀/일</b></div>`;
+      inner+=`<div class="fgRow"><span>평균 사이클</span><b>${pace.avgCycle.toFixed(0)}s</b></div>`;
+      inner+=`<div class="fgTrack"><div class="fgFill" style="width:${Math.min(100,ratio*100)}%;background:${col}"></div></div>`;
+      inner+=`<div class="fgVerdict" style="color:${col}">${ratio>=1?`✓ 목표의 ${ratio.toFixed(1)}배 여유`:'⚠ 목표 미달 페이스'}</div>`;
+    }else{
+      inner+=`<div class="fgRow"><span>현재 페이스</span><b>측정중…</b></div>`;
+    }
+    g.innerHTML=inner;
   }
 }
-window.__FLOW = FLOW;   // 검증 훅
-// FLOW canvas 참조 초기화 (DOM 로드 완료 시점)
-FLOW.canvas = document.getElementById('flowCanvas');
-FLOW.ctx = FLOW.canvas ? FLOW.canvas.getContext('2d') : null;
+window.updateFlowOverlay = updateFlowOverlay;
 
 /* ── 종합(overview) 약식 카드 그리드 — 뷰 레지스트리 기반 적응형 ── */
+// 미니 시각 헬퍼: 진행률 바 / 통계행 / 스탯칩
+function ovBar(label, pct, color){
+  const p=Math.max(0,Math.min(100,pct));
+  return `<div class="ovMetric"><span class="ovMk">${label}</span>
+    <span class="ovTrack"><span class="ovFill" style="width:${p}%;background:${color}"></span></span>
+    <span class="ovMv">${Math.round(pct)}%</span></div>`;
+}
+function ovStat(pairs){ // [[label,val,color]...]
+  return `<div class="ovStats">`+pairs.map(([l,v,c])=>`<div class="ovStat"><div class="ovSv" style="color:${c||'#cfe'}">${v}</div><div class="ovSl">${l}</div></div>`).join('')+`</div>`;
+}
 const VIEW_TILES = [
   { key:'cell', label:'누리셀', icon:'🌱', kpi(){
-      const ready = (typeof dstage!=='undefined') ? Array.from(dstage).filter(s=>s===3).length : 0;
       const total = (typeof NDRUM!=='undefined')?NDRUM:2880;
-      return { body:`수확임박 ${ready} / 총 ${total}셀`, badge: ready>total*0.15?'warn':'ok', badgeText: ready>total*0.15?'수확 몰림':'정상' };
+      let ready=0, growing=0, seed=0;
+      if(typeof dstage!=='undefined') Array.from(dstage).forEach(s=>{ if(s===3)ready++; else if(s>=1)growing++; else seed++; });
+      const pct = ready/total*100;
+      const body = ovStat([['수확임박', ready, ready>total*0.15?'#efb050':'#5ee0a0'],['생육중', growing,'#7aae9c'],['시드', seed,'#6a9a8a']])
+        + ovBar('수확 비율', pct, ready>total*0.15?'#efb050':'#39d98a');
+      return { body, badge: ready>total*0.15?'warn':'ok', badgeText: ready>total*0.15?'수확 몰림':'정상' };
   }},
   { key:'hw', label:'HW', icon:'🖧', kpi(){
-      const warn = (typeof spans!=='undefined') ? spans.filter(s=>s.status==='warning').length : 0;
-      return { body:`센서 노드 · 경고 ${warn}동`, badge: warn?'warn':'ok', badgeText: warn?`${warn}동 경고`:'정상' };
+      const tot=(typeof spans!=='undefined')?spans.length:5;
+      const warn=(typeof spans!=='undefined')?spans.filter(s=>s.status==='warning').length:0;
+      const ok=tot-warn;
+      const body = ovStat([['정상 동', ok,'#5ee0a0'],['경고 동', warn, warn?'#ff8080':'#6a9a8a'],['센서', '20/20','#7aae9c']])
+        + ovBar('센서 정상률', ok/tot*100, warn?'#efb050':'#39d98a');
+      return { body, badge: warn?'warn':'ok', badgeText: warn?`${warn}동 경고`:'정상' };
   }},
   { key:'facility', label:'설비', icon:'🔧', kpi(){
-      return { body:'관수 · 냉난방 가동', badge:'ok', badgeText:'정상' };
+      const body = ovStat([['관수','ON','#5ee0a0'],['냉난방','자동','#7aae9c'],['CO₂','정상','#7aae9c']])
+        + ovBar('설비 가동', 100, '#39d98a');
+      return { body, badge:'ok', badgeText:'정상' };
   }},
   { key:'flow', label:'물류 흐름', icon:'🚚', kpi(){
       const target=flowDailyTarget(), pace=flowCurrentPace();
-      if(!pace) return { body:`목표 ${target.toFixed(0)}셀/일 · 측정중`, badge:'ok', badgeText:'측정중' };
+      if(!pace) return { body: ovStat([['목표', target.toFixed(0)+'셀','#7aae9c'],['페이스','측정중','#6a9a8a']]), badge:'ok', badgeText:'측정중' };
       const ratio=pace.perDay/target;
-      return { body:`페이스 ${pace.perDay.toFixed(0)}/${target.toFixed(0)}셀 (${ratio.toFixed(1)}배)`,
-               badge: ratio>=1.5?'ok':ratio>=1?'warn':'crit', badgeText: ratio>=1?'달성 페이스':'미달' };
+      const col = ratio>=1.5?'#39d98a':ratio>=1?'#efb050':'#e24b4a';
+      const body = ovStat([['목표/일', target.toFixed(0),'#7aae9c'],['현재 페이스', pace.perDay.toFixed(0), col],['사이클', pace.avgCycle.toFixed(0)+'s','#7aae9c']])
+        + ovBar('목표 달성률', Math.min(100,ratio*100), col);
+      return { body, badge: ratio>=1.5?'ok':ratio>=1?'warn':'crit', badgeText: ratio>=1?`목표의 ${ratio.toFixed(1)}배`:'미달' };
   }},
   { key:'cockpit', label:'조정실', icon:'🎮', kpi(){
-      const active = (typeof carriers!=='undefined') ? carriers.filter(c=>c.id!=='C-03'||c.state!==4).length : 0;
-      const tot = (typeof carriers!=='undefined')?carriers.length:3;
-      return { body:`캐리어 가동 ${active}/${tot}`, badge:'ok', badgeText:'가동중' };
+      const tot=(typeof carriers!=='undefined')?carriers.length:3;
+      let active=0, charging=0;
+      if(typeof carriers!=='undefined') carriers.forEach(c=>{ if(c.state===4)charging++; else active++; });
+      const body = ovStat([['가동', active,'#5ee0a0'],['충전/예비', charging,'#7aae9c'],['AMR','12/12','#7aae9c']])
+        + ovBar('캐리어 가동률', active/tot*100, '#39d98a');
+      return { body, badge:'ok', badgeText:'가동중' };
   }}
 ];
 function renderOverviewGrid(){
@@ -4365,9 +4367,8 @@ function renderOverviewGrid(){
   el.innerHTML = VIEW_TILES.map(t=>{
     let k; try{ k=t.kpi(); }catch(e){ k={body:'—',badge:'ok',badgeText:'—'}; }
     return `<div class="ovCard" onclick="setView('${t.key}')">
-      <div class="ovTitle">${t.icon} ${t.label}</div>
+      <div class="ovTitle">${t.icon} ${t.label}<span class="ovBadge ${k.badge}">${k.badgeText}</span></div>
       <div class="ovBody">${k.body}</div>
-      <div class="ovBadge ${k.badge}">${k.badgeText}</div>
     </div>`;
   }).join('');
 }
@@ -4381,25 +4382,31 @@ window.setView = function(mode, auto){
   facilityView = (mode === 'facility');
   cockpitView  = (mode === 'cockpit');
   const isCell = (mode === 'cell');
-  // 조정실 뷰는 캐리어·로봇팔·누리셀을 봐야 하므로 누리셀+물류 표시
+  const isFlowMode = (mode === 'flow');   // 물류 흐름: 3D 씬 재활용, 랙·적재셀만 숨김
+  // 조정실·cell·flow는 캐리어·AGV(물류) 표시. flow는 누리셀 적재만 숨김.
   const showFarm = isCell || cockpitView;
+  const showLogistics = isCell || cockpitView || isFlowMode;
 
-  // 누리셀·LED — cell/cockpit에서 표시
+  // 누리셀·LED — cell/cockpit에서만 (flow에선 숨김 → 이동체 부각)
   inst.visible    = showFarm;
   bore.visible    = showFarm;
   ledInst.visible = showFarm;
-  // 물류 객체(캐리어·AMR·충전소) — cell/cockpit에서 표시
-  logisticsObjects.forEach(o=>{ if(o) o.visible = showFarm; });
+  // 랙 프레임 — flow에서 숨김 (랙 삭제 = 이동체만 남김)
+  if(typeof rackFrameRefs !== 'undefined') rackFrameRefs.forEach(r=>{ if(r) r.visible = !isFlowMode; });
+  // flow 전용 속도 링·병목 마커 레이어 토글
+  if(typeof FLOW !== 'undefined' && FLOW.layer) FLOW.layer.visible = isFlowMode;
+  // 물류 객체(캐리어·AMR·충전소) — cell/cockpit/flow에서 표시
+  logisticsObjects.forEach(o=>{ if(o) o.visible = showLogistics; });
   // 하드웨어 레이어 — hw에서만
   hwLayer.visible = hwView;
   // 설비 레이어 — facility에서만 (아직 미생성 시 안전)
   if(typeof facilityLayer !== 'undefined') facilityLayer.visible = facilityView;
-  // HW뷰: 동 골격 반투명화 → 네트워크 객체만 또렷 (cell/facility는 원복)
+  // 동 골격: hw 반투명, flow는 더 흐리게(이동체 부각), 그 외 원복
   if(typeof edgeRefs !== 'undefined'){
     edgeRefs.forEach((ef,i)=>{
       const warn = spans[i] && spans[i].status==='warning';
       const baseOp = warn ? .5 : .26;
-      ef.material.opacity = hwView ? baseOp*.25 : baseOp;
+      ef.material.opacity = hwView ? baseOp*.25 : isFlowMode ? baseOp*.4 : baseOp;
     });
   }
 
@@ -4409,6 +4416,8 @@ window.setView = function(mode, auto){
     tgt.set(GW*SPAN/2 - 9, 3.2, GL/2);  th = .74; ph = .64; rad = 112;
   }else if(facilityView){
     tgt.set(GW*SPAN/2 - 6, 2.8, GL/2);  th = .58; ph = .68; rad = 104;
+  }else if(isFlowMode){
+    tgt.set(GW*SPAN/2, 1.5, GL/2);      th = .32; ph = 1.28; rad = 96;   // 탑다운 근접(이동체 흐름 조망)
   }else if(!cockpitView){
     tgt.set(GW*SPAN/2, 4.0, GL/2);      th = .48; ph = 1.05; rad = 88; spin = true;
   }
@@ -4437,19 +4446,15 @@ window.setView = function(mode, auto){
     else hud.classList.remove('on');
   }
 
-  // 물류 흐름(flow) / 종합(overview) 오버레이 토글
-  const flowEl = document.getElementById('flowCanvas');
+  // 물류 흐름(flow) 게이지 / 종합(overview) 그리드 오버레이 토글
+  const gaugeEl = document.getElementById('flowGauge');
   const ovEl   = document.getElementById('overviewGrid');
   const isFlow = (mode==='flow'), isOverview = (mode==='overview');
-  if(flowEl) flowEl.classList.toggle('on', isFlow);
-  if(ovEl)   ovEl.classList.toggle('on', isOverview);
-  // flow/overview는 전용 전체화면 → 좌/우 사이드 패널·물리검증 패널 숨김(캔버스/카드 가림 방지)
-  const fullscreenView = isFlow || isOverview;
-  ['lp','rp','pvPanel'].forEach(pid=>{ const p=document.getElementById(pid); if(p) p.style.display = fullscreenView ? 'none' : ''; });
-  if(isFlow && FLOW.canvas){                     // canvas 픽셀 크기 동기화
-    FLOW.canvas.width = FLOW.canvas.clientWidth;
-    FLOW.canvas.height = FLOW.canvas.clientHeight;
-  }
+  if(gaugeEl) gaugeEl.classList.toggle('on', isFlow);   // flow: 3D 씬 위 처리량 게이지만 HTML 오버레이
+  if(ovEl)    ovEl.classList.toggle('on', isOverview);
+  // overview는 전용 전체화면 → 좌/우 사이드 패널·물리검증 패널 숨김. flow는 3D라 우측 패널 유지(맥락).
+  ['lp','rp','pvPanel'].forEach(pid=>{ const p=document.getElementById(pid); if(p) p.style.display = isOverview ? 'none' : ''; });
+  if(isFlow) updateFlowOverlay();
   if(isOverview) renderOverviewGrid();
 };
 // 기존 호출 호환
