@@ -4235,15 +4235,21 @@ function flowDailyTarget(){
   const total = (typeof NDRUM!=='undefined') ? NDRUM : 2880;
   return total / (FLOW.cycleDayInput || 25);
 }
-// 현재 처리 페이스: 캐리어 최근 평균 사이클타임 → 시간당 처리량 추정
+// 현재 처리 페이스: 캐리어 최근 평균 사이클타임 → 시간당 처리량 추정.
+//   첫 사이클 전엔 이론 사이클(이동거리 기반)로 잠정 표시(측정중 방지).
 function flowCurrentPace(){
-  let sum=0, n=0;
-  carriers.forEach(c=>{ if(c.id!=='C-03' && c.cycleTimes && c.cycleTimes.length){
-    sum += c.cycleTimes.reduce((a,b)=>a+b,0)/c.cycleTimes.length; n++; } });
-  if(!n) return null;
-  const avgCycle = sum/n;                    // 초/사이클
-  const perHour = (3600/avgCycle) * n;       // 가동 캐리어 수 반영 시간당
-  return { avgCycle, perHour, perDay: perHour*20 };  // 20h 가동 기준
+  let sum=0, n=0, active=0;
+  carriers.forEach(c=>{
+    if(c.id==='C-03' && c.state===4) return;   // 충전 중 예비 제외
+    active++;
+    if(c.cycleTimes && c.cycleTimes.length){ sum += c.cycleTimes.reduce((a,b)=>a+b,0)/c.cycleTimes.length; n++; }
+  });
+  let avgCycle, est=false;
+  if(n){ avgCycle = sum/n; }
+  else { avgCycle = (GL/1.4) + 13; est=true; }  // 이론: 평균왕복50m÷1.4 + 작업13s ≈ 49s
+  const carriers_n = Math.max(1, active);
+  const perHour = (3600/avgCycle) * carriers_n;
+  return { avgCycle, perHour, perDay: perHour*20, est };   // 20h 가동 기준
 }
 // 물류 흐름 오버레이: 3D 씬(랙 숨김) 위 ① 이동체 속도 발광 링 ② 병목 바닥 마커 ③ 처리량 게이지.
 function updateFlowOverlay(){
@@ -4293,15 +4299,14 @@ function updateFlowOverlay(){
     g._t=now;
     let inner=`<div class="fgTitle">🚚 처리량 (재배주기 ${FLOW.cycleDayInput}일)</div>`;
     inner+=`<div class="fgRow"><span>하루 목표</span><b>${target.toFixed(0)}셀</b></div>`;
-    if(pace){
+    {
       const ratio=pace.perDay/target;
       const col=ratio>=1.5?'#39d98a':ratio>=1?'#efb050':'#e24b4a';
-      inner+=`<div class="fgRow"><span>현재 페이스</span><b style="color:${col}">${pace.perDay.toFixed(0)}셀/일</b></div>`;
+      const tag=pace.est?' <span style="color:#6a9a8a">(추정)</span>':'';
+      inner+=`<div class="fgRow"><span>현재 페이스${tag}</span><b style="color:${col}">${pace.perDay.toFixed(0)}셀/일</b></div>`;
       inner+=`<div class="fgRow"><span>평균 사이클</span><b>${pace.avgCycle.toFixed(0)}s</b></div>`;
       inner+=`<div class="fgTrack"><div class="fgFill" style="width:${Math.min(100,ratio*100)}%;background:${col}"></div></div>`;
       inner+=`<div class="fgVerdict" style="color:${col}">${ratio>=1?`✓ 목표의 ${ratio.toFixed(1)}배 여유`:'⚠ 목표 미달 페이스'}</div>`;
-    }else{
-      inner+=`<div class="fgRow"><span>현재 페이스</span><b>측정중…</b></div>`;
     }
     g.innerHTML=inner;
   }
@@ -4417,7 +4422,7 @@ window.setView = function(mode, auto){
   }else if(facilityView){
     tgt.set(GW*SPAN/2 - 6, 2.8, GL/2);  th = .58; ph = .68; rad = 104;
   }else if(isFlowMode){
-    tgt.set(GW*SPAN/2, 1.5, GL/2);      th = .32; ph = 1.28; rad = 96;   // 탑다운 근접(이동체 흐름 조망)
+    tgt.set(GW*SPAN/2, 0.5, GL/2);      th = 0; ph = 0.14; rad = 78;   // 진짜 탑다운(위에서 수직) — cos(ph)≈1 → 높은 시점, 통로 겹침 없이 지도처럼
   }else if(!cockpitView){
     tgt.set(GW*SPAN/2, 4.0, GL/2);      th = .48; ph = 1.05; rad = 88; spin = true;
   }
@@ -4452,8 +4457,10 @@ window.setView = function(mode, auto){
   const isFlow = (mode==='flow'), isOverview = (mode==='overview');
   if(gaugeEl) gaugeEl.classList.toggle('on', isFlow);   // flow: 3D 씬 위 처리량 게이지만 HTML 오버레이
   if(ovEl)    ovEl.classList.toggle('on', isOverview);
-  // overview는 전용 전체화면 → 좌/우 사이드 패널·물리검증 패널 숨김. flow는 3D라 우측 패널 유지(맥락).
-  ['lp','rp','pvPanel'].forEach(pid=>{ const p=document.getElementById(pid); if(p) p.style.display = isOverview ? 'none' : ''; });
+  // overview: 좌/우/물리검증 전부 숨김(전용 카드화면). flow: 좌패널·물리검증만 숨김(이동체 집중), 우패널 유지.
+  const hideL = isOverview || isFlow;   // 좌패널·물리검증 패널
+  ['lp','pvPanel'].forEach(pid=>{ const p=document.getElementById(pid); if(p) p.style.display = hideL ? 'none' : ''; });
+  const rp=document.getElementById('rp'); if(rp) rp.style.display = isOverview ? 'none' : '';
   if(isFlow) updateFlowOverlay();
   if(isOverview) renderOverviewGrid();
 };
