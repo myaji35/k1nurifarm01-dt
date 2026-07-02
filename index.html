@@ -4941,7 +4941,7 @@ window.toggleView = function(){ window.setView(currentView==='cell' ? 'hw' : 'ce
    - 사용자 조작(탭 클릭·마우스·휠·키·터치) 시 즉시 중단 + idle 타이머 리셋
    ══════════════════════════════════════════════════════ */
 const VIEW_ORDER = ['overview','cell','hw','facility','flow','cockpit'];
-const IDLE_MS   = 60000;   // 60초 무조작 → 자동 순환 시작
+const IDLE_MS   = 180000;  // 180초(3분) 무조작 → 자동 순환 시작 (종합탭 등 충분한 관찰 시간 확보)
 const ROTATE_MS = 12000;   // 12초마다 다음 탭
 let idleTimer = null, rotateTimer = null, autoPlaying = false;
 
