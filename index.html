@@ -3146,6 +3146,12 @@ function loop(ts){
     const v=c.vis;
     const arm=v.robotArm;
 
+    // 안전 리셋: 하역/적재(state 2·7)가 아니면 운반드럼(scene 직속)을 확실히 숨김.
+    //   인계가 phase 도중 중단돼도 드럼이 원점(0,0,0)에 잔류·표시되던 "누리셀 공중 부유" 버그 방지.
+    if(c.state!==2 && c.state!==7 && arm.transferDrum && arm.transferDrum.material.opacity>0){
+      arm.transferDrum.material.opacity = 0;
+    }
+
     if(c.state===0){ // 주행 (통로 기반 waypoint 경로, 사선 이동 금지)
       const aisleXOffset = c.aisle===0 ? A1C : A2C;
       const validX = Math.round((c.targetX - aisleXOffset)/GW)*GW + aisleXOffset;
@@ -3291,11 +3297,17 @@ function loop(ts){
     else if(c.state===2){ // 하역 → 누리셀을 손끝에서 AMR 위로 운반·하역 (픽&플레이스)
       const phase = c.stateTimer / 4.0;
       const pairAmr = amrPool.find(a=>a.target===c && a.role==='pickup-out');
+      // AMR이 근접(다리밑, <1.5m)일 때만 드럼 이송 — 멀면 누리셀이 공중으로 날아가 보임(방지)
+      const amrClose = pairAmr && Math.hypot(pairAmr.x-c.x, pairAmr.z-c.z) < 1.5;
       const td = arm.transferDrum, tv = _tmpV;
+      if(!amrClose){
+        // AMR이 근접 전이면 운반드럼을 절대 표시하지 않음(공중 부유 방지). carryDrum은 든 채 대기.
+        td.material.opacity = 0;
+      }
       if(phase < .30){
         // 1) 캐리지를 AMR 인계 높이로 하강 (누리셀 든 채)
         gantryMove(arm, Math.min(1, dt*2.5), POSE_DROP_DOWN);
-      }else if(phase < .70 && pairAmr){
+      }else if(phase < .70 && pairAmr && amrClose){
         // 2) 운반 누리셀이 포크 → AMR heldDrum 위치로 이동 (carryDrum 페이드아웃, transfer 보임)
         const t = (phase-.30)/.40;
         arm.carryDrum.getWorldPosition(tv); const sx=tv.x, sy=tv.y, sz=tv.z;
@@ -3306,7 +3318,7 @@ function loop(ts){
         td.material.opacity = .92;
         td.material.color.setHex(c.drumColor);
         arm.carryDrum.material.opacity = Math.max(0, .92*(1-t*3));  // 손에서 빠르게 사라짐
-      }else if(phase < .82){
+      }else if(phase < .82 && amrClose){
         // 3) AMR 위에 안착 — transfer 페이드아웃 (AMR heldDrum 페이드인은 AMR state3이 처리)
         const t = (phase-.70)/.12;
         td.material.opacity = .92*(1-t);
@@ -3362,7 +3374,9 @@ function loop(ts){
       const phase = c.stateTimer / 4.5;
       const inPose = poseStackSide(arm, c.targetTierY);  // 빈 랙 단 높이 반영(상하 이동)
       const td = arm.transferDrum, tv = _tmpV;
-      const pairAmr = amrPool.find(a=>a.target===c && a.role==='delivery-in');
+      const pairAmrRaw = amrPool.find(a=>a.target===c && a.role==='delivery-in');
+      // AMR이 근접(<1.5m)일 때만 heldDrum에서 이송 — 멀면 누리셀이 공중으로 날아가 보임(방지)
+      const pairAmr = (pairAmrRaw && Math.hypot(pairAmrRaw.x-c.x, pairAmrRaw.z-c.z) < 1.5) ? pairAmrRaw : null;
       if(phase < .12){
         // 1) 캐리지를 AMR 인계 높이로 하강 (수령 준비)
         gantryMove(arm, Math.min(1, dt*2.5), POSE_DROP_DOWN);
