@@ -864,10 +864,10 @@ for(let si=0;si<SPAN;si++){
     });
   });
 
-  /* 랙 프레임 (rackFrameRefs에 수집 → flow 뷰에서 숨김) */
+  /* 랙 프레임 (rackFrameRefs에 수집 → flow 뷰에서 숨김) — 랙공간 z구간(RACK_Z0~)에만, 주통로 침범 방지 */
   RACKXC.forEach(rc=>{
-    [.2,GL-.2].forEach(rz=>rackFrameRefs.push(bx(.05,GH-.2,.05,0x183525,ox+rc,( GH-.2)/2,rz,.7)));
-    TY.forEach(ty=>rackFrameRefs.push(bx(DW-.04,.04,GL-.3,0x183525,ox+rc,ty+DR+.04,GL/2,.6)));
+    [RACK_Z0+.2, GL-AISLE_W-.2].forEach(rz=>rackFrameRefs.push(bx(.05,GH-.2,.05,0x183525,ox+rc,( GH-.2)/2,rz,.7)));
+    TY.forEach(ty=>rackFrameRefs.push(bx(DW-.04,.04,RACK_ZLEN-.3,0x183525,ox+rc,ty+DR+.04,RACK_ZC,.6)));
   });
 }
 
