@@ -1055,9 +1055,11 @@ function seedWeekLog(){
     amrs_.forEach((id,ai)=>{
       const idle = (ai % 4 === 3);   // 4번째마다 유휴 많은 예비 AMR
       const nCyc = idle ? (5+Math.floor(rnd()*5)) : (25+Math.floor(rnd()*10));
+      // 예지보전 재현: IN-11(ai 0)은 날짜에 비례해 작업시간 점증(바퀴/배터리 마모 시뮬) → 추세 탐지 검증
+      const wearFactor = (ai===0) ? (1 + (day-1)*0.06) : 1;   // 하루 6%씩 느려짐
       for(let k=0;k<nCyc;k++){
         const distM = 20 + rnd()*40;
-        const work = 5 + rnd()*5;                        // 인계 작업시간(캐리어보다 짧음)
+        const work = (5 + rnd()*5) * wearFactor;         // 인계 작업시간(마모 시 증가)
         const cycleSec = distM/FLEET.V_MAX.amr + work;
         logCycle(id, 'amr', cycleSec, distM, 2 + (ai%3)*4);
       }
@@ -1067,6 +1069,68 @@ function seedWeekLog(){
   return FLEET.dailyLog;
 }
 window.__fleetSeed = seedWeekLog;
+
+// 예지보전 추세 분석 — 7일 dailyLog에서 엔티티별 사이클타임 추세(선형 기울기) 산출.
+//   사이클타임이 매일 증가 = 배터리 노화·바퀴/베어링 마모·그리퍼 열화 전조 → 고장 전 정비 권고.
+function analyzeMaintenance(){
+  const days = FLEET.dailyLog;
+  if(days.length < 3) return [];   // 최소 3일 추세 필요
+  // 엔티티별 [day, avgCycleSec] 시계열 수집
+  const series={};
+  days.forEach(d=>{ (d.agg||[]).forEach(a=>{ if(a.avgCycleSec>0){ (series[a.entity]=series[a.entity]||{kind:a.kind, pts:[]}).pts.push([d.day, a.avgCycleSec]); } }); });
+  const alerts=[];
+  Object.entries(series).forEach(([entity, s])=>{
+    const pts=s.pts; if(pts.length < 3) return;
+    // 최소제곱 선형회귀 기울기(초/일) — 양수면 사이클 점점 느려짐
+    const n=pts.length, sx=pts.reduce((a,p)=>a+p[0],0), sy=pts.reduce((a,p)=>a+p[1],0);
+    const sxx=pts.reduce((a,p)=>a+p[0]*p[0],0), sxy=pts.reduce((a,p)=>a+p[0]*p[1],0);
+    const slope=(n*sxy - sx*sy)/(n*sxx - sx*sx || 1);
+    const base=sy/n;
+    const pctPerDay = base>0 ? slope/base*100 : 0;   // 일일 사이클 증가율(%)
+    if(pctPerDay >= 1.2){   // 하루 1.2%+ 지속 증가(주간 ~8%+) = 열화 의심, 조기 감지
+      alerts.push({ entity, kind:s.kind, slope:+slope.toFixed(2), pctPerDay:+pctPerDay.toFixed(1),
+        detail:`사이클타임 +${pctPerDay.toFixed(1)}%/일 상승 추세 → ${s.kind==='amr'?'배터리·바퀴 마모':'그리퍼·베어링 마모'} 의심, 정비 권고` });
+    }
+  });
+  return alerts;
+}
+window.__fleetMaint = analyzeMaintenance;
+
+// 통로 병목 분석 — cycleLog의 통로별 작업 빈도 집계. 편중 상위 통로 = 병목 → 부하 분산 근거.
+function analyzeBottleneck(){
+  const byAisle={};
+  FLEET.cycleLog.forEach(c=>{ byAisle[c.aisle]=(byAisle[c.aisle]||0)+1; });
+  const arr=Object.entries(byAisle).map(([a,n])=>({aisle:+a, count:n})).sort((x,y)=>y.count-x.count);
+  if(!arr.length) return {top:[], verdict:'데이터 없음'};
+  const mx=arr[0].count, mn=arr[arr.length-1].count;
+  return { top:arr.slice(0,3), max:mx, min:mn,
+    verdict: mx > mn*2 ? `병목 통로 ${arr[0].aisle}(${mx}회) — 최소 통로의 ${(mx/Math.max(1,mn)).toFixed(1)}배, 부하 분산 필요` : '통로 부하 균등' };
+}
+window.__fleetBottleneck = analyzeBottleneck;
+
+// AMR 대수 최적화 시뮬 — 대수별 예상 처리량 vs 유휴율. 목표 달성 최소 대수 산출.
+//   현재 실측 사이클당 처리량 기준으로 대수를 스케일해 선형 추정(간이 모델).
+function simFleetSize(){
+  const dayC = FLEET.cycleLog.filter(c=>c.day===FLEET.day);
+  const amrCyc = dayC.filter(c=>c.kind==='amr');
+  const curAmr = (typeof amrPool!=='undefined') ? amrPool.length : 12;
+  const perAmrCycles = curAmr>0 ? amrCyc.length/curAmr : 0;   // AMR 1대당 하루 사이클
+  const cycleDay = (typeof FLOW!=='undefined' && FLOW.cycleDayInput) ? FLOW.cycleDayInput : 25;
+  const target = (typeof NDRUM!=='undefined'?NDRUM:2880) / cycleDay;   // 하루 목표 셀
+  // 캐리어가 실제 병목(AMR은 대개 여유) → 대수별 처리량은 min(AMR용량, 캐리어용량)에 수렴.
+  const carrierCap = dayC.filter(c=>c.kind==='carrier').length;   // 캐리어 하루 총 사이클(=처리 상한)
+  const sims=[8,10,12,14,16].map(n=>{
+    const amrCap = perAmrCycles * n;                 // 그 대수의 AMR 총 처리 가능
+    const throughput = Math.min(amrCap, carrierCap); // 캐리어 상한에 clamp
+    const idleRatio = amrCap>0 ? Math.max(0, 1 - throughput/amrCap) : 0;
+    return { amr:n, throughput:Math.round(throughput), idlePct:+(idleRatio*100).toFixed(0), meetsTarget: throughput>=target };
+  });
+  const optimal = sims.filter(s=>s.meetsTarget).sort((a,b)=>a.amr-b.amr)[0] || sims[sims.length-1];
+  return { sims, target:Math.round(target), optimal:optimal.amr, current:curAmr,
+    verdict: optimal.amr < curAmr ? `목표 달성 최소 ${optimal.amr}대 < 현재 ${curAmr}대 → ${curAmr-optimal.amr}대 감차 여력` :
+             optimal.amr > curAmr ? `목표 위해 ${optimal.amr}대 필요 > 현재 ${curAmr}대 → 증차 검토` : `현재 ${curAmr}대 적정` };
+}
+window.__fleetSizeSim = simFleetSize;
 // 수확시점 고려 staggered 배치 (대표님 통찰: 처음부터 예상 수확시점 분산 식재):
 //   각 누리셀의 생장일을 황금비 저불일치 수열로 위상 부여 → 30일 사이클이
 //   시간·공간 모두 균등 분산. 매 시뮬 구간 전체의 ~1/30만 수확단계 도달 →
@@ -4686,10 +4750,12 @@ function renderFleetLogCard(){
     // 대표 개선 권고 (3축에서 하나씩 최대 3)
     const impSet=[]; week.forEach(d=>d.improvements.forEach(i=>{ if(!impSet.find(x=>x.axis===i.axis)) impSet.push(i); }));
     const impHtml = impSet.slice(0,3).map(i=>`<span class="ovAlert warn">${i.axis}</span>`).join('');
+    let maintN=0; try{ maintN=analyzeMaintenance().length; }catch(e){}
+    const maintHtml = maintN>0 ? `<span class="ovAlert crit">정비 ${maintN}</span>` : '';
     return `<div class="ovCard" onclick="alert(fleetLogText())" style="cursor:pointer;background:linear-gradient(160deg,#0a1826,#07131f)">
       <div class="ovShade"></div>
       <div class="ovTitle">🚚 7일 운행일지<span class="ovBadge ${badge}">${badgeTxt}</span></div>
-      <div class="ovOverlay">일평균 ${avgCyc}사이클 · 개선 ${impSet.length}건${impHtml}</div>
+      <div class="ovOverlay">일평균 ${avgCyc}사이클 · 개선 ${impSet.length}건${impHtml}${maintHtml}</div>
     </div>`;
   }catch(e){ return `<div class="ovCard"><div class="ovTitle">🚚 운행일지</div><div class="ovOverlay">—</div></div>`; }
 }
@@ -4703,7 +4769,15 @@ function fleetLogText(){
     d.improvements.forEach(i=>{ s+=`  ✓ [${i.axis}] ${i.detail}\n`; });
     s += '\n';
   });
-  s += '심야 분석: 이상 제거 + 효율 개선(동선·속도·생산량) 반영 → 다음날 재기록';
+  // 예지보전 추세 (7일 사이클타임 상승 감지)
+  try{ const m = analyzeMaintenance();
+    if(m.length){ s += '━ 예지보전 (고장 전 정비) ━\n'; m.forEach(x=>{ s+=`  🔧 ${x.entity}: ${x.detail}\n`; }); s+='\n'; }
+  }catch(e){}
+  // 통로 병목
+  try{ const b = analyzeBottleneck(); s += `━ 통로 병목 ━\n  📍 ${b.verdict}\n\n`; }catch(e){}
+  // AMR 대수 최적화
+  try{ const f = simFleetSize(); s += `━ AMR 대수 최적화 ━\n  🚚 ${f.verdict}\n  대수별: ${f.sims.map(x=>`${x.amr}대→${x.throughput}셀(유휴${x.idlePct}%)`).join(' / ')}\n\n`; }catch(e){}
+  s += '심야 분석: 이상 제거 + 효율 개선(동선·속도·생산량) + 예지보전 + 대수최적화 → 다음날 재기록';
   return s;
 }
 window.fleetLogText = fleetLogText;
