@@ -2786,15 +2786,23 @@ function cellTierY(i){ return TY[Math.floor(i/_PER_TIER) % TY.length]; }  // 단
 function pickNewTarget(c){
   let best = -1, bestDay = -1;
   const zone = c.zoneSpan;
+  // 랙통로 1대 전용(폭1.75<캐리어1.6×2 → 맞통행 불가). 다른 캐리어가 있거나 목표로 삼은 통로 X는 제외.
+  const cellX = i => cellSpan(i)*GW + (cellAisle(i)===0?A1C:A2C);
+  const aisleTaken = x => carriers.some(o => o!==c && (
+        Math.abs((o.x||0) - x) < 0.6 ||                 // 현재 그 통로에 있음
+        (typeof o.targetX==='number' && Math.abs(o.targetX - x) < 0.6)  // 그 통로를 목표로 함
+      ));
   for(let i=0;i<NDRUM;i++){
     if(dstage[i] !== 3) continue;               // 수확단계만
     if(zone.indexOf(cellSpan(i)) < 0) continue;  // 담당 동만
+    if(aisleTaken(cellX(i))) continue;           // 다른 캐리어 점유 통로 배제(맞통행 방지)
     if(dayOld[i] > bestDay){ bestDay = dayOld[i]; best = i; }
   }
   if(best < 0){
-    // 담당 동에 수확단계 없음 → 가장 익은 셀(임박 예정)로 선제 이동
+    // 담당 동에 수확단계 없음 → 가장 익은 셀(임박 예정)로 선제 이동 (통로 중복 배제 유지)
     for(let i=0;i<NDRUM;i++){
       if(zone.indexOf(cellSpan(i)) < 0) continue;
+      if(aisleTaken(cellX(i))) continue;
       if(dayOld[i] > bestDay){ bestDay = dayOld[i]; best = i; }
     }
   }
