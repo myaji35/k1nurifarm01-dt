@@ -1709,6 +1709,7 @@ function cellWorldPos(idx){
 }
 
 function spawnPulse(idx, color){
+  if(typeof currentView !== 'undefined' && currentView === 'flow') return;  // 물류흐름 탭: 센서 신호 링 표시 안 함
   const ring = pulseRings[pulseIdx];
   pulseIdx = (pulseIdx + 1) % PULSE_POOL_SIZE;
   const p = cellWorldPos(idx);
@@ -2812,13 +2813,20 @@ function pickNewTarget(c){
   c.targetZ = cellZ(best);
   c.targetTierY = cellTierY(best);               // 조정실 카메라 상하 포커스용 (작업 셀의 단 높이)
   c.targetCell = best;                           // 작업 대상 누리셀 인덱스 (추적 기록용)
-  // P3: 예측 스테이징 — 다음 타겟이 정해지는 즉시(캐리어 이동 시작 전) OUT-AMR을 선행 배차.
-  //   캐리어와 거의 동시에 출발 → 목적지 픽업지점에서 빈 AMR이 먼저/함께 도착(선점 강화).
+  // P3: 예측 스테이징 — 다음 타겟이 정해지는 즉시(캐리어 이동 시작 전) OUT·IN-AMR을 동시 선행 배차.
+  //   캐리어가 이동을 시작하는 순간 협업 AMR도 함께 출발 → 캐리어가 랙 도착 시 AMR도 근처에 도착.
+  //   (대표님 2026-07-02: 캐리어가 AMR을 기다리는 대기시간을 만들지 말 것.)
   if(best>=0 && typeof workQueue!=='undefined' && typeof amrPool!=='undefined'){
-    const exists = workQueue.find(r=>r.carrier===c && r.kind==='pickup-out');
-    const assigned = amrPool.find(a=>a.target===c && a.role==='pickup-out');
-    if(!exists && !assigned){
+    const exOut = workQueue.find(r=>r.carrier===c && r.kind==='pickup-out');
+    const asOut = amrPool.find(a=>a.target===c && a.role==='pickup-out');
+    if(!exOut && !asOut){
       workQueue.push({ kind:'pickup-out', carrier:c, priority:5, requestedAt:Date.now(), predictive:true });
+    }
+    // IN-AMR도 동시 선행 배차 — 컨베이어 자재 싣는 시간까지 벌어 캐리어 도착 즈음 랙통로 진입 완료.
+    const exIn = workQueue.find(r=>r.carrier===c && r.kind==='delivery-in');
+    const asIn = amrPool.find(a=>a.target===c && a.role==='delivery-in');
+    if(!exIn && !asIn){
+      workQueue.push({ kind:'delivery-in', carrier:c, priority:5, requestedAt:Date.now(), predictive:true });
     }
   }
 }
@@ -2939,14 +2947,25 @@ function loop(ts){
     a.stateTimer += dt;
     const v = a.vis;
 
-    if(a.state===0){ // 대기 — 전용 주통로(IN=위/OUT=아래)에서 담당 캐리어 통로 입구쪽에 줄서기
-      // IN-AMR은 위 통로(IN_AISLE_Z), OUT-AMR은 아래 통로(CROSS_AISLE_Z)에서 대기.
+    if(a.state===0){ // 대기 — 담당 캐리어를 상시 추종. 캐리어가 랙통로 안에 있으면 AMR도 통로 안까지 따라 들어가 근처 대기.
+      // IN-AMR은 위 통로(IN_AISLE_Z)측, OUT-AMR은 아래 통로(CROSS_AISLE_Z)측에서 접근.
+      //   (대표님 2026-07-02: 캐리어와 동시에 움직여 대기시간을 없앤다. 단 다리밑 간섭 없는 위치로.)
       const hc = carriers.find(c=>c.id===a.homeCarrier);
       const aisleX = hc ? hc.x : a.homeX;
-      // 같은 kind는 followSlot으로 X방향 분산(교행 여유). 통로 폭 3m 안에서 z도 살짝 분산.
-      const sideX = aisleX + a.followSlot*0.0;
-      const sideZ = a.aisleZ + (a.followSlot-1)*0.7;   // 전용 통로 안에서 줄서기(폭3m 활용)
-      const followX = sideX, followZ = sideZ;
+      const sideX = aisleX + a.followSlot*0.0;   // 담당 캐리어 랙통로 X 정렬
+      // 캐리어가 랙통로 안(z 3~47)에서 작업 임박(state 8/5/6 or 이동 중 목적지가 랙)이면,
+      //   AMR을 캐리어 근처 z(자기 주통로 방향에서 약간 못 미친 지점)까지 미리 따라 들여보냄.
+      const cInRack = hc && hc.z > RACK_Z0 && hc.z < GL-AISLE_W;
+      let followZ;
+      if(cInRack){
+        // 캐리어 z를 향해 미리 접근하되, 아직 인계 전이므로 캐리어 바로 앞(다리밑 직전 0.9m)까지만.
+        const approachGap = 0.9;
+        const dir = (a.aisleZ < hc.z) ? -1 : +1;   // IN(위)은 캐리어보다 z작은쪽에서, OUT(아래)은 z큰쪽에서 대기
+        followZ = hc.z + dir*approachGap + (a.followSlot-1)*0.5;
+      }else{
+        followZ = a.aisleZ + (a.followSlot-1)*0.7;   // 캐리어 이동/충전 중엔 주통로에서 줄서기
+      }
+      const followX = sideX;
       a.x += (followX - a.x) * Math.min(1, dt*2.5);
       a.z += (followZ - a.z) * Math.min(1, dt*2.5);
       const idleClr = a.kind==='in' ? 0x40a0ff : 0xffa040;
@@ -4286,7 +4305,7 @@ function flowCurrentPace(){
 // 물류 흐름 오버레이: 3D 씬(랙 숨김) 위 ① 이동체 속도 발광 링 ② 병목 바닥 마커 ③ 처리량 게이지.
 function updateFlowOverlay(){
   const now=performance.now();
-  // ── ① 이동체 속도 링 + ② 병목 히트 ──
+  // ── ① 이동체 속도 링(캐리어·AMR 발밑, 속도=색) + ② 병목 히트 ──
   if(FLOW.layer){
     const RING=new THREE.RingGeometry(0.9,1.25,20);
     flowMovers().forEach(m=>{
@@ -4514,6 +4533,15 @@ window.setView = function(mode, auto){
   if(typeof rackFrameRefs !== 'undefined') rackFrameRefs.forEach(r=>{ if(r) r.visible = !isFlowMode; });
   // flow 전용 속도 링·병목 마커 레이어 토글
   if(typeof FLOW !== 'undefined' && FLOW.layer) FLOW.layer.visible = isFlowMode;
+  // 물류흐름 탭: 캐리어·AMR·누리셀·컨베이어에 집중 → 센서 신호 링(pulseRings) 숨김(대표님 2026-07-02).
+  //   (속도 링은 유지 — 캐리어·AMR 속도 표시용.) flow 이탈 시 다시 정상 동작.
+  if(typeof pulseRings !== 'undefined'){
+    if(isFlowMode) pulseRings.forEach(r=>{ r.visible=false; r._flowHidden=true; });
+    else pulseRings.forEach(r=>{ if(r._flowHidden){ r._flowHidden=false; } });
+  }
+  // AMR LED 비콘 + 캐리어 beacon 숨김 (flow에선 작은 발광 원이 노이즈)
+  if(typeof amrVis !== 'undefined') amrVis.forEach(v=>{ if(v && v.led) v.led.visible = !isFlowMode; });
+  if(typeof carrierVis !== 'undefined') carrierVis.forEach(v=>{ if(v && v.beacon) v.beacon.visible = !isFlowMode; });
   // 물류 객체(캐리어·AMR·충전소) — cell/cockpit/flow에서 표시
   logisticsObjects.forEach(o=>{ if(o) o.visible = showLogistics; });
   // 하드웨어 레이어 — hw에서만
