@@ -1077,10 +1077,19 @@ window.__fleetSeed = seedWeekLog;
 const ESS_CAP_KWH = 3650;        // ESS 총 용량
 const ESS_SOC_MIN = 0.15, ESS_SOC_MAX = 1.0;  // 과방전 방지 하한 15%
 let essSOC = 0.78;               // 초기 충전상태 78%
-const PHI_INV = 0.61803398875;  // 황금비 켤레 (저불일치 → 균등 분산)
+// 클러스터 식재 배치 (대표님 2026-07-02: 랙 배치 효율 = 캐리어 운영의 근원):
+//   같은 랙통로(동 si·통로 ri)의 셀들은 생장일을 비슷하게 → 수확기에 함께 익어
+//   캐리어가 한 통로에서 연속 수확(동선 최소). 통로마다는 위상을 황금비로 어긋내
+//   → 통로별 수확 시점 분산(동시에 여러 통로가 안 익음 = 캐리어 처리능력 내, 몰림 방지).
+//   idx 구조: ((si*RACKXC.length + ri)*TY.length + ti)*DZ_N + di
+const PHI_INV = 0.61803398875;  // 황금비 켤레 (통로 간 위상 저불일치 분산)
+const _NAISLE = SPAN * RACKXC.length;                 // 총 랙통로 수(동×통로)
+const _PER_AISLE = TY.length * DZ_N;                  // 통로당 셀 수(단×z)
 for(let i=0;i<NDRUM;i++){
-  // i*φ⁻¹ 소수부 → [0,1) 균등 분포, 인접 i끼리 위상이 크게 벌어져 공간적으로도 분산
-  const phase = (i * PHI_INV) % 1;
+  const aisleIdx = Math.floor(i / _PER_AISLE);        // 이 셀이 속한 랙통로 번호
+  const aislePhase = (aisleIdx * PHI_INV) % 1;        // 통로별 기준 위상(통로끼리 크게 벌어짐)
+  const withinJitter = ((i % _PER_AISLE) / _PER_AISLE) * (0.7/HARVEST_DAY);  // 통로 내 미세 편차(≤0.7일)
+  const phase = (aislePhase + withinJitter) % 1;      // 같은 통로 셀들은 거의 동일 위상(클러스터)
   dayOld[i] = phase * HARVEST_DAY;
   dstage[i] = stageFromDay(dayOld[i]);
 }
