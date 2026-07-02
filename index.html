@@ -3104,14 +3104,18 @@ function loop(ts){
       // 캐리어가 랙통로 안(z 3~47)에서 작업 임박(state 8/5/6 or 이동 중 목적지가 랙)이면,
       //   AMR을 캐리어 근처 z(자기 주통로 방향에서 약간 못 미친 지점)까지 미리 따라 들여보냄.
       const cInRack = hc && hc.z > RACK_Z0 && hc.z < GL-AISLE_W;
+      // 랙통로 1조 전용(대표님 2026-07-02): AMR도 교행 불가 → 한 통로에 kind별 1대(선발대, followSlot 0)만 진입.
+      //   나머지 같은 kind AMR은 주통로에서 대기(작업 조가 빠져야 다음 조 진입). role 배정된 작업 AMR은 자기 state로 진입.
+      const isLead = (a.followSlot === 0);
       let followZ;
-      if(cInRack){
-        // 캐리어 z를 향해 미리 접근하되, 아직 인계 전이므로 캐리어 바로 앞(다리밑 직전 0.9m)까지만.
+      if(cInRack && isLead){
+        // 선발대만 캐리어 z 근처(다리밑 직전 0.9m)까지 미리 접근. 인계 시 짧은 거리만 진입.
         const approachGap = 0.9;
-        const dir = (a.aisleZ < hc.z) ? -1 : +1;   // IN(위)은 캐리어보다 z작은쪽에서, OUT(아래)은 z큰쪽에서 대기
-        followZ = hc.z + dir*approachGap + (a.followSlot-1)*0.5;
+        const dir = (a.aisleZ < hc.z) ? -1 : +1;   // IN(위)은 z작은쪽, OUT(아래)은 z큰쪽에서 대기
+        followZ = hc.z + dir*approachGap;
       }else{
-        followZ = a.aisleZ + (a.followSlot-1)*0.7;   // 캐리어 이동/충전 중엔 주통로에서 줄서기
+        // 비선발 AMR: 주통로에서 담당 캐리어 통로 입구쪽에 줄서기(랙통로 진입 금지 → 교행·혼잡 방지)
+        followZ = a.aisleZ + (a.followSlot-1)*0.7;
       }
       const followX = sideX;
       a.x += (followX - a.x) * Math.min(1, dt*2.5);
@@ -4628,9 +4632,9 @@ function captureViewThumb(key){
 }
 function renderOverviewGrid(){
   const el=document.getElementById('overviewGrid'); if(!el) return;
-  const n=VIEW_TILES.length, cols=Math.ceil(Math.sqrt(n));
+  const n=VIEW_TILES.length + 1, cols=Math.ceil(Math.sqrt(n));   // +1 = 운행일지 카드
   el.style.gridTemplateColumns=`repeat(${cols},1fr)`;
-  el.innerHTML = VIEW_TILES.map(t=>{
+  let html = VIEW_TILES.map(t=>{
     let k; try{ k=t.kpi(); }catch(e){ k={badge:'ok',badgeText:'—',alerts:[]}; }
     const thumb = OV_THUMBS[t.key];
     const bg = thumb ? `style="background-image:url(${thumb})"` : '';
@@ -4643,7 +4647,44 @@ function renderOverviewGrid(){
       <div class="ovOverlay">${k.headline||''}${alertHtml}</div>
     </div>`;
   }).join('');
+  html += renderFleetLogCard();
+  el.innerHTML = html;
 }
+// 종합탭 운행일지 카드 — 7일 기록 요약(처리량·이상·개선 3축). 1회 시드 생성.
+let _fleetSeeded = false;
+function renderFleetLogCard(){
+  try{
+    if(!_fleetSeeded && typeof seedWeekLog==='function'){ seedWeekLog(); _fleetSeeded=true; }
+    const week = FLEET.dailyLog;
+    if(!week || !week.length) return `<div class="ovCard"><div class="ovTitle">🚚 운행일지</div><div class="ovOverlay">기록 준비중</div></div>`;
+    const totAnom = week.reduce((s,d)=>s+d.anomalies.length,0);
+    const avgCyc = Math.round(week.reduce((s,d)=>s+d.totCycles,0)/week.length);
+    const badge = totAnom>0 ? 'warn' : 'ok';
+    const badgeTxt = totAnom>0 ? `이상 ${totAnom}` : '정상';
+    // 대표 개선 권고 (3축에서 하나씩 최대 3)
+    const impSet=[]; week.forEach(d=>d.improvements.forEach(i=>{ if(!impSet.find(x=>x.axis===i.axis)) impSet.push(i); }));
+    const impHtml = impSet.slice(0,3).map(i=>`<span class="ovAlert warn">${i.axis}</span>`).join('');
+    return `<div class="ovCard" onclick="alert(fleetLogText())" style="cursor:pointer;background:linear-gradient(160deg,#0a1826,#07131f)">
+      <div class="ovShade"></div>
+      <div class="ovTitle">🚚 7일 운행일지<span class="ovBadge ${badge}">${badgeTxt}</span></div>
+      <div class="ovOverlay">일평균 ${avgCyc}사이클 · 개선 ${impSet.length}건${impHtml}</div>
+    </div>`;
+  }catch(e){ return `<div class="ovCard"><div class="ovTitle">🚚 운행일지</div><div class="ovOverlay">—</div></div>`; }
+}
+// 운행일지 상세 텍스트 (카드 클릭 시)
+function fleetLogText(){
+  const week = FLEET.dailyLog || [];
+  let s = '━ 캐리어·AMR 7일 운행일지 ━\n\n';
+  week.forEach(d=>{
+    s += `[${d.day}일차] 처리 ${d.totCycles}셀 · 이상 ${d.anomalies.length}건\n`;
+    d.anomalies.slice(0,2).forEach(a=>{ s+=`  ⚠ ${a.type}(${a.entity}): ${a.detail}\n`; });
+    d.improvements.forEach(i=>{ s+=`  ✓ [${i.axis}] ${i.detail}\n`; });
+    s += '\n';
+  });
+  s += '심야 분석: 이상 제거 + 효율 개선(동선·속도·생산량) 반영 → 다음날 재기록';
+  return s;
+}
+window.fleetLogText = fleetLogText;
 window.renderOverviewGrid = renderOverviewGrid;
 // 종합 진입 시: 썸네일 6장 순차 캡처 후 원래 뷰 복원 (1회성). 이후 재캡처는 수동.
 let _ovThumbsReady = false;
