@@ -2772,6 +2772,16 @@ renderAisleVerdict(1.75);   // 통로폭 검증 패널 초기 렌더(현재 폭)
 // req: { kind:'pickup-out'|'delivery-in', carrier, requestedAt }
 const workQueue = [];
 
+// ── AMR 운영 조율 상태 (대표님 Goal: 효과적 AMR 운영 로직) ──
+//   랙통로 점유: 통로X(반올림) → {carrier, since, phase}. 인계 중인 1조만 점유. FIFO 순서화 근거.
+const AISLE_OCC = {};
+function aisleKey(x){ return Math.round(x); }
+// 캐리어가 인계 착수 시 통로 점유 등록(이미 점유면 유지). 완료 시 해제.
+function claimAisle(c){ const k=aisleKey(c.x); if(!AISLE_OCC[k] || AISLE_OCC[k].carrier===c.id) AISLE_OCC[k]={carrier:c.id, since:Date.now()}; }
+function releaseAisle(c){ const k=aisleKey(c.x); if(AISLE_OCC[k] && AISLE_OCC[k].carrier===c.id) delete AISLE_OCC[k]; }
+// 활성 AMR 수 동적 조율: 야간 분석 권고를 반영(감차 시 유휴 AMR을 정비 대기로). 기본 전량 활성.
+const FLEET_CTRL = { activeAmrCap: null };   // null=제한없음, 숫자=활성 상한(kind별 비례)
+
 // 기존 AVN_STATION은 더 이상 사용 안 함 — 호환 위해 빈 객체 유지
 AVN_STATION.x = 0; AVN_STATION.z = 0; AVN_STATION.hasDrum = false;
 
@@ -3322,6 +3332,8 @@ function loop(ts){
     if(c.state!==2 && c.state!==7 && arm.transferDrum && arm.transferDrum.material.opacity>0){
       arm.transferDrum.material.opacity = 0;
     }
+    // 통로 점유 조율: 인계 상태(5·2·6·7·8)면 점유 유지, 그 외(주행0·대기3·충전4)면 해제 → 다음 조 진입 허용.
+    if(c.state===0 || c.state===3 || c.state===4) releaseAisle(c);
 
     if(c.state===0){ // 주행 (통로 기반 waypoint 경로, 사선 이동 금지)
       const aisleXOffset = c.aisle===0 ? A1C : A2C;
@@ -3392,6 +3404,7 @@ function loop(ts){
           if(!inExists && !inAssigned){
             workQueue.push({ kind:'delivery-in', carrier:c, priority:4, requestedAt:Date.now() });
           }
+          claimAisle(c);                    // 이 랙통로를 이 캐리어 조가 점유(다음 조는 완료까지 대기)
           c.state = 8; c.stateTimer = 0;   // OUT-AMR 선점 도착 대기 → 도착 시 픽업(1)
         }
       }else if(dist > .05){
