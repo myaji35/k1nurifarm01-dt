@@ -750,6 +750,11 @@ const IN_AISLE_Z    = AISLE_W/2;         // IN 통로(앞/위) 중심 z=1.5 — 
 const CROSS_AISLE_Z = GL - AISLE_W/2;    // OUT 통로(뒤/아래) 중심 z=48.5 — OUT-AMR 대기·주행(수확 출고측)
 const CROSS_AISLE_W = AISLE_W;
 const IN_AISLE_W    = AISLE_W;
+// 랙 공간(랙통로가 놓이는 z구간) = 주통로 2개 사이. z=AISLE_W ~ GL-AISLE_W (3~47), 길이 44m.
+//   랙통로 바닥은 이 구간에만 그려 주통로(위/아래)와 겹치지 않게 → 위·아래 배치가 명확(L자·격자 방지).
+const RACK_Z0  = AISLE_W;              // 랙통로 시작 z = 3
+const RACK_ZLEN = GL - 2*AISLE_W;      // 랙통로 길이 = 44
+const RACK_ZC  = GL/2;                 // 랙통로 중심 z = 25
 // AMR home Z: kind에 따라 주통로 상/하로 분배
 const amrAisleZ = (kind)=> kind==='in' ? IN_AISLE_Z : CROSS_AISLE_Z;
 // AMR 측면 우회로 (횡단 통로 ↔ IN 컨베이어 연결, X=-2.0 위치)
@@ -814,32 +819,32 @@ for(let si=0;si<SPAN;si++){
     const p=bx(.07,GH,.07,sc,ox+cx,GH/2,cz,.5);p.material.transparent=true;
   });
 
-  /* 통로 ① 바닥 */
-  bx(A1W,.03,GL,0x003850,ox+A1C,.018,GL/2,.9);
-  bx(.04,.02,GL,0x00aacc,ox+A1S,.03,GL/2,.7);
-  bx(.04,.02,GL,0x00aacc,ox+A1E,.03,GL/2,.7);
-  for(let zi=1;zi<GL;zi+=1.8){bx(.10,.025,.10,0x009988,ox+A1C,.025,zi,.85);}
+  /* 통로 ① 바닥 — 랙 공간 z구간(RACK_Z0~)에만 (주통로와 안 겹침) */
+  bx(A1W,.03,RACK_ZLEN,0x003850,ox+A1C,.018,RACK_ZC,.9);
+  bx(.04,.02,RACK_ZLEN,0x00aacc,ox+A1S,.03,RACK_ZC,.7);
+  bx(.04,.02,RACK_ZLEN,0x00aacc,ox+A1E,.03,RACK_ZC,.7);
+  for(let zi=RACK_Z0;zi<GL-AISLE_W;zi+=1.8){bx(.10,.025,.10,0x009988,ox+A1C,.025,zi,.85);}
 
   /* 통로 ② 바닥 */
-  bx(A2W,.03,GL,0x002a40,ox+A2C,.018,GL/2,.9);
-  bx(.04,.02,GL,0x00aacc,ox+A2S,.03,GL/2,.7);
-  bx(.04,.02,GL,0x00aacc,ox+A2E,.03,GL/2,.7);
-  for(let zi=1;zi<GL;zi+=1.8){bx(.10,.025,.10,0x009988,ox+A2C,.025,zi,.85);}
+  bx(A2W,.03,RACK_ZLEN,0x002a40,ox+A2C,.018,RACK_ZC,.9);
+  bx(.04,.02,RACK_ZLEN,0x00aacc,ox+A2S,.03,RACK_ZC,.7);
+  bx(.04,.02,RACK_ZLEN,0x00aacc,ox+A2E,.03,RACK_ZC,.7);
+  for(let zi=RACK_Z0;zi<GL-AISLE_W;zi+=1.8){bx(.10,.025,.10,0x009988,ox+A2C,.025,zi,.85);}
 
   /* ── 관리통로 3개 (무정지 정비용, 70cm) — 1열좌/2-3사이/4열우 ──
      1층(지상): 1·2단 셀 관리. 2층(3.0m=셀 2단 위): 3·4단 셀 관리.
      1↔2층 계단으로 오르내림. 좌우 랙·벽 보호로 난간 없음. (2026-06-25 정본) */
   const WALK_ELEV_Y = 3.0;   // 2층 발판 = 셀 2단 위(1500×2). 3·4단 작업 위치
   WALK_XC.forEach((wx, wi)=>{
-    // 1층 바닥 (그레이팅 색) — 1·2단 관리
-    bx(WALK_W, .035, GL, 0x3a4452, ox+wx, .02, GL/2, .92);
+    // 1층 바닥 (그레이팅 색) — 1·2단 관리 (랙 z구간에만)
+    bx(WALK_W, .035, RACK_ZLEN, 0x3a4452, ox+wx, .02, RACK_ZC, .92);
     // 1층 복도 경계 라인 (옅은 청록)
-    bx(.03,.02,GL,0x5a7a8a, ox+wx-WALK_W/2, .04, GL/2,.6);
-    bx(.03,.02,GL,0x5a7a8a, ox+wx+WALK_W/2, .04, GL/2,.6);
+    bx(.03,.02,RACK_ZLEN,0x5a7a8a, ox+wx-WALK_W/2, .04, RACK_ZC,.6);
+    bx(.03,.02,RACK_ZLEN,0x5a7a8a, ox+wx+WALK_W/2, .04, RACK_ZC,.6);
     // 2층 발판 (elevated walkway, 3.0m) — 3·4단 관리
-    bx(WALK_W, .04, GL, 0x46525e, ox+wx, WALK_ELEV_Y, GL/2, .55);
+    bx(WALK_W, .04, RACK_ZLEN, 0x46525e, ox+wx, WALK_ELEV_Y, RACK_ZC, .55);
     // 2층 발판 지지 기둥 (일정 간격)
-    for(let zi=4; zi<GL; zi+=8){
+    for(let zi=RACK_Z0+1; zi<GL-AISLE_W; zi+=8){
       bx(.06, WALK_ELEV_Y, .06, 0x2a3340, ox+wx-WALK_W/2+.05, WALK_ELEV_Y/2, zi, .7);
       bx(.06, WALK_ELEV_Y, .06, 0x2a3340, ox+wx+WALK_W/2-.05, WALK_ELEV_Y/2, zi, .7);
     }
