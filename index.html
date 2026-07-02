@@ -73,6 +73,10 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 #flowGauge .fgTrack{height:7px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin-top:8px}
 #flowGauge .fgFill{height:100%;border-radius:4px;transition:width .4s}
 #flowGauge .fgVerdict{font-size:11px;font-weight:600;margin-top:6px}
+#flowGauge .fgCycle .fgStep{display:inline-flex;align-items:center;gap:6px}
+#flowGauge .fgStep button{pointer-events:auto;width:18px;height:18px;line-height:1;padding:0;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#cfe;border-radius:4px;cursor:pointer;font-size:13px;font-weight:700}
+#flowGauge .fgStep button:hover{background:rgba(57,217,138,.25);border-color:rgba(57,217,138,.5)}
+#flowGauge .fgStep b{min-width:30px;text-align:center}
 /* 종합(overview) 썸네일 카드 그리드 — 각 뷰 3D 캡처 배경 + 정보 오버랩 */
 #overviewGrid{position:absolute;inset:0;display:none;z-index:7;background:#02060c;padding:14px;box-sizing:border-box;grid-gap:12px;overflow:auto}
 #overviewGrid.on{display:grid}
@@ -738,10 +742,16 @@ scene.add(grid);
    캐리어와 AVN이 동 사이를 이동할 수 있는 횡단 영역
    위치: 하우스 출구(z=GL) ~ OUT 컨베이어 직전(z=GL+1.0) 사이
 */
-const CROSS_AISLE_Z = GL + 1.2;   // 뒤쪽 횡단 통로 (캐리어 + AMR 공용)
-const CROSS_AISLE_W = 2.4;
-const IN_AISLE_Z    = -1.0;        // (잔존 변수, 사용 안 함)
-const IN_AISLE_W    = 1.6;
+// 주통로 = IN 통로(앞/위) + OUT 통로(뒤/아래). 전체 50m(GL) 안에 [IN통로 + 랙공간 + OUT통로]를 모두 수용.
+//   배분: IN 통로 z=0~3(폭3m,중심1.5) · 랙공간 z=3~47(44m) · OUT 통로 z=47~50(폭3m,중심48.5).
+//   OUT-AMR은 아래(OUT 통로)에서, IN-AMR은 위(IN 통로)에서 각각 대기·진입 → 캐리어 앞 인계.
+const AISLE_W       = 3.0;         // 주통로 폭(각 통로) — 대표님 제약 ≤3m
+const IN_AISLE_Z    = AISLE_W/2;         // IN 통로(앞/위) 중심 z=1.5 — IN-AMR 대기·주행(자재 공급측)
+const CROSS_AISLE_Z = GL - AISLE_W/2;    // OUT 통로(뒤/아래) 중심 z=48.5 — OUT-AMR 대기·주행(수확 출고측)
+const CROSS_AISLE_W = AISLE_W;
+const IN_AISLE_W    = AISLE_W;
+// AMR home Z: kind에 따라 주통로 상/하로 분배
+const amrAisleZ = (kind)=> kind==='in' ? IN_AISLE_Z : CROSS_AISLE_Z;
 // AMR 측면 우회로 (횡단 통로 ↔ IN 컨베이어 연결, X=-2.0 위치)
 const SIDE_AISLE_X  = -2.0;        // 좌측 측면 우회로 X 좌표
 const SIDE_AISLE_W  = 1.6;         // 우회로 폭 (X축)
@@ -749,11 +759,16 @@ const SIDE_AISLE_W  = 1.6;         // 우회로 폭 (X축)
 // 컨베이어 상수 — TDZ 회피 위해 시각화 코드보다 먼저 선언
 const IN_CONVEYOR  = { z: -2.6,      color: 0x4a5a7a, drumColor: 0x4080c0, dirSign: -1, paused: false }; // 앞쪽 (자재 공급)
 const OUT_CONVEYOR = { z: GL + 2.6,  color: 0xc49010, drumColor: 0xff8c30, dirSign:  1, paused: false }; // 뒤쪽 (수확 출고)
-// 통로 바닥 (어두운 시안)
+// OUT 통로(뒤/아래) 바닥 (어두운 시안)
 bx(GW*SPAN+4, .04, CROSS_AISLE_W, 0x062840, GW*SPAN/2, .025, CROSS_AISLE_Z, .95);
-// 통로 양쪽 경계선
+// OUT 통로 양쪽 경계선
 bx(GW*SPAN+4, .03, .06, 0x00b0d0, GW*SPAN/2, .045, CROSS_AISLE_Z - CROSS_AISLE_W/2, .85);
 bx(GW*SPAN+4, .03, .06, 0x00b0d0, GW*SPAN/2, .045, CROSS_AISLE_Z + CROSS_AISLE_W/2, .85);
+// IN 통로(앞/위) 바닥 + 경계선 — OUT 통로와 대칭. IN-AMR 대기·주행 구간.
+bx(GW*SPAN+4, .04, CROSS_AISLE_W, 0x062840, GW*SPAN/2, .025, IN_AISLE_Z, .95);
+bx(GW*SPAN+4, .03, .06, 0x2a70c0, GW*SPAN/2, .045, IN_AISLE_Z - CROSS_AISLE_W/2, .85);
+bx(GW*SPAN+4, .03, .06, 0x2a70c0, GW*SPAN/2, .045, IN_AISLE_Z + CROSS_AISLE_W/2, .85);
+for(let xi=1; xi<GW*SPAN+3; xi+=1.4){ bx(.6, .025, .08, 0x40a0ff, xi, .04, IN_AISLE_Z, .9); }
 // 중앙선 (점선)
 for(let xi=1; xi<GW*SPAN+3; xi+=1.4){
   bx(.6, .025, .08, 0x00d8e0, xi, .04, CROSS_AISLE_Z, .9);
@@ -782,29 +797,8 @@ const crossLabel = (()=>{
   sp.scale.set(3.0,.40,1);sp.position.set(GW*SPAN/2, .9, CROSS_AISLE_Z);scene.add(sp);return sp;
 })();
 
-/* ── AMR 측면 우회로 (횡단 통로 ↔ IN 컨베이어 연결) ── */
-// Z축: IN 컨베이어(z=-2.6) ~ 횡단 통로(z=GL+1.2), 길이 약 GL+4
-// X축: SIDE_AISLE_X (좌측 측면)
-const sideAisleLen = (CROSS_AISLE_Z - IN_CONVEYOR.z) + 1.0;
-const sideAisleCZ = (CROSS_AISLE_Z + IN_CONVEYOR.z) / 2;
-bx(SIDE_AISLE_W, .04, sideAisleLen, 0x062840, SIDE_AISLE_X, .025, sideAisleCZ, .9);
-bx(.06, .03, sideAisleLen, 0x00b0d0, SIDE_AISLE_X - SIDE_AISLE_W/2, .045, sideAisleCZ, .8);
-bx(.06, .03, sideAisleLen, 0x00b0d0, SIDE_AISLE_X + SIDE_AISLE_W/2, .045, sideAisleCZ, .8);
-// 중앙선 (점선)
-for(let zi = IN_CONVEYOR.z; zi < CROSS_AISLE_Z; zi += 1.4){
-  bx(.08, .025, .5, 0x00d8e0, SIDE_AISLE_X, .04, zi, .85);
-}
-// 측면 우회로 라벨
-const sideAisleLabel = (()=>{
-  const cv=document.createElement('canvas');cv.width=200;cv.height=40;
-  const cx2=cv.getContext('2d');
-  cx2.fillStyle='rgba(0,30,55,.92)';cx2.fillRect(0,0,200,40);
-  cx2.strokeStyle='rgba(0,216,224,.85)';cx2.lineWidth=2;cx2.strokeRect(1,1,198,38);
-  cx2.fillStyle='#5ee0e8';cx2.font='bold 12px Segoe UI,Malgun Gothic,sans-serif';
-  cx2.textAlign='center';cx2.textBaseline='middle';cx2.fillText('SIDE AISLE · AMR 우회로', 100, 20);
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
-  sp.scale.set(2.0,.42,1);sp.position.set(SIDE_AISLE_X, .9, sideAisleCZ);scene.add(sp);return sp;
-})();
+/* 측면 우회로(SIDE AISLE) 제거 — IN-AMR이 위 IN통로로 직접 접근하므로 불필요.
+   주통로는 위(IN)·아래(OUT) 가로 2개만 존재(L자 배치 잔재 제거). */
 
 /* ── 5동 구조 ── */
 const edgeRefs=[];
@@ -2566,7 +2560,7 @@ ASSETS.carriers.forEach((c, ci)=>{
   for(let k=1;k<=_amrCfg.out;k++) _amrDefs.push({id:`OUT-${ci+1}`,    kind:'out', carrier:c.id});
 });
 const amrVis = _amrDefs.map(d =>
-  buildAVN(d.id, d.id, d.kind==='in'?AMR_IN_CLR:AMR_OUT_CLR, CROSS_AISLE_Z, GL*.5)
+  buildAVN(d.id, d.id, d.kind==='in'?AMR_IN_CLR:AMR_OUT_CLR, amrAisleZ(d.kind), GL*.5)   // IN=위통로 / OUT=아래통로
 );
 
 // AMR 초기 위치 — 담당 캐리어 통로 근처 분산 (이후 캐리어 추종)
@@ -2575,7 +2569,7 @@ const _aisleXOf = Object.fromEntries(ASSETS.carriers.map(c=>[c.id, _carrierSpawn
 // 홈 정렬 간격 1.1m (AGV폭 1.0 + 여유 0.1) — 0.7이면 1.0폭과 겹침 (2026-06-25 수정)
 const amrHomeXs = _amrDefs.map((d,i)=> _aisleXOf[d.carrier] + ((i%4)-1.5)*1.1);
 amrVis.forEach((v, i)=>{
-  v.grp.position.set(amrHomeXs[i], 0, CROSS_AISLE_Z);
+  v.grp.position.set(amrHomeXs[i], 0, amrAisleZ(_amrDefs[i].kind));   // IN=위 / OUT=아래 통로 home
 });
 
 /* 물류 시각 객체 수집 (하드웨어 뷰에서 숨김 → 토폴로지 가독성)
@@ -2604,8 +2598,9 @@ const amrPool = _amrDefs.map((d,i)=>{
     drumColor: d.kind==='in' ? 0x4080c0 : 0xff8c30,
     battery: 60 + Math.random()*40,   // AMR 배터리(충전·정비 반영)
     cyclesSinceService: 0,            // 정비 주기 카운트
-    homeX: amrHomeXs[i], homeZ: CROSS_AISLE_Z,
-    x: amrHomeXs[i], z: CROSS_AISLE_Z,
+    homeX: amrHomeXs[i], homeZ: amrAisleZ(d.kind),   // IN=위 / OUT=아래 통로
+    x: amrHomeXs[i], z: amrAisleZ(d.kind),
+    aisleZ: amrAisleZ(d.kind),   // 이 AMR 전용 주통로 z (state머신 경로에서 참조)
     waypoint:null
   };
 });
@@ -2800,7 +2795,8 @@ function pickNewTarget(c){
   if(best < 0){ // 안전망 (담당 동 자체가 없을 때)
     const spanIdx = zone[0] || 0;
     c.targetX = spanIdx*GW + (c.aisle===0?A1C:A2C);
-    c.targetZ = rng(1.5, GL-1.5);
+    // 랙통로 범위(셀 z=3.6~46.4) 안에서만 대기 → 주통로(위1.5·아래48.5)를 목표로 잡지 않음
+    c.targetZ = rng(DZ_0, DZ[DZ_N-1]);
     c.targetTierY = TY[1];
     c.targetCell = -1;
     return;
@@ -2905,10 +2901,10 @@ function loop(ts){
     for(let qi=workQueue.length-1; qi>=0; qi--){
       const req = workQueue[qi];
       const wantKind = req.kind==='delivery-in' ? 'in' : 'out';
-      // 통로 점유 1대 원칙: 해당 캐리어 통로에 이미 작업(진입~인계~복귀) 중인 AMR이 있으면
-      //   새 AMR을 통로에 들이지 않음 → 다음 tick까지 사이드 대기. (좁은 통로 정체 방지)
-      const laneBusy = amrPool.some(a => a.homeCarrier===req.carrier.id && a.state>=1 && a.state<=4);
-      if(laneBusy) continue;
+      // 통로 점유 원칙(제자리 스왑): OUT받이·IN공급은 서로 다른 역할이라 캐리어 양옆에 동시 접근 가능.
+      //   따라서 "같은 kind" 1대만 제한(OUT 2대·IN 2대 중복 방지). 반대 kind는 동시 허용 → 스왑 성립.
+      const kindBusy = amrPool.some(a => a.homeCarrier===req.carrier.id && a.kind===wantKind && a.state>=1 && a.state<=4);
+      if(kindBusy) continue;
       const amr = amrPool.find(a => a.homeCarrier===req.carrier.id && a.kind===wantKind
                                     && a.state===0 && !a.role && !a.hasDrum);
       if(!amr) continue;            // 전담 AMR이 아직 바쁘면 대기 (다음 tick)
@@ -2938,14 +2934,13 @@ function loop(ts){
     a.stateTimer += dt;
     const v = a.vis;
 
-    if(a.state===0){ // 대기 — 사이드 통로(횡단통로)에서 줄서기 (통로 점유 1대 원칙)
-      // 통로 좁음 → 작업 AMR 1대만 통로 진입. 대기 AMR은 담당 캐리어 통로 입구 쪽
-      // 횡단통로(CROSS_AISLE_Z)에서 slot별로 줄서서 대기. 통로엔 진입하지 않음.
+    if(a.state===0){ // 대기 — 전용 주통로(IN=위/OUT=아래)에서 담당 캐리어 통로 입구쪽에 줄서기
+      // IN-AMR은 위 통로(IN_AISLE_Z), OUT-AMR은 아래 통로(CROSS_AISLE_Z)에서 대기.
       const hc = carriers.find(c=>c.id===a.homeCarrier);
       const aisleX = hc ? hc.x : a.homeX;
-      // IN/OUT을 좌우로, 같은 kind는 followSlot으로 횡단통로 위에서 분산
-      const sideX = aisleX + (a.kind==='in' ? -0.6 : 0.6) + a.followSlot*0.0;
-      const sideZ = CROSS_AISLE_Z + a.followSlot*0.9;   // 횡단통로에서 줄서기
+      // 같은 kind는 followSlot으로 X방향 분산(교행 여유). 통로 폭 3m 안에서 z도 살짝 분산.
+      const sideX = aisleX + a.followSlot*0.0;
+      const sideZ = a.aisleZ + (a.followSlot-1)*0.7;   // 전용 통로 안에서 줄서기(폭3m 활용)
       const followX = sideX, followZ = sideZ;
       a.x += (followX - a.x) * Math.min(1, dt*2.5);
       a.z += (followZ - a.z) * Math.min(1, dt*2.5);
@@ -2954,19 +2949,15 @@ function loop(ts){
       v.led.material.emissive.setHex(idleClr);
       v.led.material.emissiveIntensity = .45;
     }
-    else if(a.state===1){ // IN 컨베이어로 측면 우회로 통해 이동 + 적재
-      // 경로: 현재 위치(횡단 통로) → SIDE_AISLE_X로 X 이동 → IN 컨베이어 옆 Z로 이동 → 적재
-      // waypoint 단계별
-      const sideAisleEndZ = IN_CONVEYOR.z + 1.2;  // IN 컨베이어 바로 옆
+    else if(a.state===1){ // IN 자재 적재 — IN-AMR은 위 통로에 있으므로 IN 컨베이어(앞쪽 z<0)로 바로 접근
+      // 경로: 위 통로(IN_AISLE_Z=1.5) → 앞쪽 IN 컨베이어 옆(z≈-1.4)으로 Z 이동 → 적재
+      const inLoadZ = IN_CONVEYOR.z + 1.2;  // IN 컨베이어 바로 옆(z≈-1.4)
       let stepX, stepZ;
-      if(Math.abs(a.x - SIDE_AISLE_X) > .2){
-        // 1) 횡단 통로 위 X 이동해서 측면 우회로 입구로
-        stepX = SIDE_AISLE_X; stepZ = CROSS_AISLE_Z;
-      }else if(Math.abs(a.z - sideAisleEndZ) > .2){
-        // 2) 측면 우회로 따라 IN 컨베이어 쪽으로 Z 이동
-        stepX = SIDE_AISLE_X; stepZ = sideAisleEndZ;
+      if(Math.abs(a.z - inLoadZ) > .2){
+        // 1) 위 통로에서 앞쪽 IN 컨베이어로 Z 이동 (X는 담당 캐리어 열 유지 → 교행 분산)
+        stepX = a.homeX; stepZ = inLoadZ;
       }else{
-        // 3) 적재 위치 도달 — IN 컨베이어 정지 + 누리셀 페이드인
+        // 2) 적재 위치 도달 — IN 컨베이어 정지 + 누리셀 페이드인
         IN_CONVEYOR.paused = true;
         v.heldDrum.material.color.setHex(a.drumColor);
         const loadT = Math.min(1, (a.stateTimer % 10) / 1.2);
@@ -2999,22 +2990,19 @@ function loop(ts){
       const nearSide = (rk===0||rk===2) ? -1 : (rk===1||rk===3) ? +1 : 0; // R1/R3=좌, R2/R4=우
       const finalX = c.x + nearSide * 0.05;   // 랙 쪽으로 5cm 근접(벽 충돌 없는 범위)
       const finalZ = c.z;
-      // 경로:
-      //   현재 위치에 따라 단계 결정
-      //   - SIDE_AISLE_X 근처에 있으면: 우선 횡단 통로(CROSS_AISLE_Z)로 X 이동
-      //   - 그 후 횡단 통로 위에서 finalX로 X 이동
-      //   - X 정렬 후 통로 안 finalZ로 Z 이동
+      // 경로(전용 주통로 기준): 자기 통로(IN=위 a.aisleZ / OUT=아래)에서 X정렬 → 캐리어 통로 안으로 진입.
+      //   IN-AMR은 위에서 아래로, OUT-AMR은 아래에서 위로 내려/올라와 캐리어 앞(다리 밑)에서 만남.
       let stepX, stepZ;
-      const onCross = Math.abs(a.z - CROSS_AISLE_Z) < .3;
+      // 주통로↔랙통로 방향: IN(위 aisleZ작음)은 캐리어쪽으로 z증가, OUT(아래 aisleZ큼)은 z감소.
+      //   x정렬 전에는 자기 주통로(aisleZ)에서 X만 맞추고, 정렬되면 곧장 캐리어 z로 진입(중간 되돌림 없음).
       const xAligned = Math.abs(a.x - finalX) < .2;
-      if(!onCross){
-        // 1) 횡단 통로로 Z 복귀 (측면 우회로에 있었던 경우)
-        stepX = a.x; stepZ = CROSS_AISLE_Z;
-      }else if(!xAligned){
-        // 2) 횡단 통로 위 X 이동
-        stepX = finalX; stepZ = CROSS_AISLE_Z;
+      // 아직 주통로 쪽(캐리어 반대편)에 있고 x정렬 전이면 → 주통로에서 X 정렬
+      const towardCarrierNotYet = (a.aisleZ < finalZ) ? (a.z < a.aisleZ + .5) : (a.z > a.aisleZ - .5);
+      if(!xAligned && towardCarrierNotYet){
+        // 1) 자기 주통로 위에서 캐리어 X로 정렬 (교행 폭 3m)
+        stepX = finalX; stepZ = a.aisleZ;
       }else{
-        // 3) 캐리어 통로 안 Z로 진입
+        // 2) 캐리어 통로 안 Z로 진입 (랙통로 관통 → 캐리어 다리 밑까지). x는 계속 미세보정.
         stepX = finalX; stepZ = finalZ;
       }
       const dx = stepX - a.x, dz = stepZ - a.z;
@@ -3057,17 +3045,17 @@ function loop(ts){
       //   - 캐리어 통로 안 → 횡단 통로로 Z 후진
       //   - role==='pickup-out' && hasDrum: 측면 우회로 → OUT 컨베이어 옆에서 하역
       //   - 그 외: home으로
-      const onCross = Math.abs(a.z - CROSS_AISLE_Z) < .3;
+      const onAisle = Math.abs(a.z - a.aisleZ) < AISLE_W/2 + .3;   // 자기 전용 통로(IN=위/OUT=아래), 통로폭 반경
       let stepX, stepZ;
       const outDropZ = OUT_CONVEYOR.z - 1.2;  // OUT 컨베이어 옆 하역 위치
       const outDropX = a.homeX;  // home X에서 하역
-      if(!onCross){
-        // 1) 횡단 통로로 후진
-        stepX = a.x; stepZ = CROSS_AISLE_Z;
+      if(!onAisle){
+        // 1) 자기 주통로로 후진 (캐리어 통로 안 → 위/아래 주통로)
+        stepX = a.x; stepZ = a.aisleZ;
       }else if(a.role === 'pickup-out' && a.hasDrum){
         // OUT 누리셀 적재 상태: 적당한 X로 가서 OUT 컨베이어로 하역
         if(Math.abs(a.x - outDropX) > .2){
-          stepX = outDropX; stepZ = CROSS_AISLE_Z;
+          stepX = outDropX; stepZ = a.aisleZ;
         }else if(Math.abs(a.z - outDropZ) > .2){
           stepX = outDropX; stepZ = outDropZ;
         }else{
@@ -3085,7 +3073,7 @@ function loop(ts){
       }else{
         // home으로 복귀
         if(Math.abs(a.x - a.homeX) > .2){
-          stepX = a.homeX; stepZ = CROSS_AISLE_Z;
+          stepX = a.homeX; stepZ = a.aisleZ;
         }else{
           stepX = a.homeX; stepZ = a.homeZ;
           if(Math.abs(a.x - a.homeX) < .15 && Math.abs(a.z - a.homeZ) < .15){
@@ -3104,7 +3092,7 @@ function loop(ts){
     else if(a.state===5){ // 충전·정비 (담당 캐리어 통로 끝 정비소에서 충전)
       // 담당 캐리어 통로의 횡단통로 위로 이동해 정비
       a.x += (a.homeX - a.x) * Math.min(1, dt*2);
-      a.z += (CROSS_AISLE_Z - a.z) * Math.min(1, dt*2.5);
+      a.z += (a.aisleZ - a.z) * Math.min(1, dt*2.5);
       a.battery = Math.min(100, a.battery + 4.0*dt);   // 충전
       // 충전 완료(95%+) + 정비 시간(>4초) → 정비 카운트 리셋 후 복귀
       if(a.battery >= 95 && a.stateTimer > 4){
@@ -3214,6 +3202,13 @@ function loop(ts){
           if(!exists && !assigned){
             let readyNow=0; for(let i=0;i<NDRUM;i++) if(dstage[i]===3) readyNow++;
             workQueue.push({ kind:'pickup-out', carrier:c, priority:Math.min(10, readyNow/30), requestedAt:Date.now() });
+          }
+          // 제자리 스왑: IN공급 AMR도 동시에 선행 배차 → 컨베이어 자재 싣는 시간을 벌어
+          //   캐리어가 OUT 하역 끝낼 즈음 IN-AMR이 양옆에 붙어 "동시 교환"이 성립한다.
+          const inExists = workQueue.find(r=>r.carrier===c && r.kind==='delivery-in');
+          const inAssigned = amrPool.find(a=>a.target===c && a.role==='delivery-in');
+          if(!inExists && !inAssigned){
+            workQueue.push({ kind:'delivery-in', carrier:c, priority:4, requestedAt:Date.now() });
           }
           c.state = 8; c.stateTimer = 0;   // OUT-AMR 선점 도착 대기 → 도착 시 픽업(1)
         }
@@ -3335,7 +3330,7 @@ function loop(ts){
         c.state = 7;  // IN 누리셀 수령 시작
         c.stateTimer = 0;
       }
-      if(c.stateTimer > 10){  // 타임아웃 단축 (IN 대기 병목 완화)
+      if(c.stateTimer > 25){  // IN-AMR이 위 통로에서 랙통로 관통(최대 44m÷2m/s≈22s)해 올 시간 확보
         c._endCycle = true;
       }
       if(c._endCycle){
@@ -4211,7 +4206,7 @@ tick();
    물류 흐름 뷰(flow) + 종합 대시보드(overview) — 비침습 신설
    기존 3D 씬/상태머신 0줄 수정. read-only 데이터만 참조.
    ══════════════════════════════════════════════════════ */
-const FLOW = { cycleDayInput:25, _prev:{}, indicators:{}, heat:[], layer:null };   // 재배주기 + 속도/병목 상태
+const FLOW = { cycleDayInput:25, _prev:{}, indicators:{}, heat:[], layer:null, coop:{} };   // 재배주기 + 속도/병목 + 협업(coop) 하이라이트 상태
 
 // flow 전용 3D 레이어: 이동체 위 속도 발광 링 + 병목 바닥 마커 (평시 숨김)
 (function initFlowLayer(){
@@ -4227,6 +4222,26 @@ function flowMovers(){
 // 속도 → 색상 (초록 빠름 / 노랑 느림 / 빨강 정지)
 function flowSpeedHex(v){
   if(v<0.08) return 0xe24b4a; if(v<0.5) return 0xefb050; return 0x39d98a;
+}
+// 현재 협업(제자리 스왑) 중인 캐리어↔AMR 쌍 목록. read-only.
+//   인계 상태(선점대기8·OUT대기5·하역2·IN대기6·IN적재7)이고 페어 AMR이 근접(<1.2m)이면 협업.
+function flowCoopPairs(){
+  const pairs=[];
+  if(typeof amrPool==='undefined') return pairs;
+  carriers.forEach(c=>{
+    const st=c.state;
+    if(st!==2 && st!==5 && st!==6 && st!==7 && st!==8) return;
+    // OUT역할(하역·선점·OUT대기) vs IN역할(수령·적재) 구분해 페어 AMR 탐색
+    const role = (st===6||st===7) ? 'delivery-in' : 'pickup-out';
+    const amr = amrPool.find(a=>a.target===c && a.role===role);
+    if(!amr) return;
+    const d = Math.hypot(amr.x-c.x, amr.z-c.z);
+    if(d < 1.6){   // 근접 시에만 협업으로 간주(이동 중은 제외)
+      const phase = (st===8||st===5) ? '대기' : (st===2) ? '수확 인계' : (st===6) ? '자재 수령' : '빈칸 적재';
+      pairs.push({ carrier:c, amr, dist:d, phase, io:(role==='delivery-in'?'in':'out') });
+    }
+  });
+  return pairs;
 }
 // 재배주기 기반 하루 목표 (dt-throughput-sim 틀). NDRUM/HARVEST_DAY 참조.
 function flowDailyTarget(){
@@ -4289,13 +4304,56 @@ function updateFlowOverlay(){
     });
     // 소멸된 병목 정리
     FLOW.heat = FLOW.heat.filter(hc=>{ if(hc.v<0.02){ if(hc.mesh){FLOW.layer.remove(hc.mesh); hc.mesh.geometry.dispose(); hc.mesh.material.dispose();} return false;} return true; });
+
+    // ── ①-b 협업(제자리 스왑) 하이라이트: 캐리어↔AMR 근접 인계를 링·연결선으로 부각 ──
+    const pairs = flowCoopPairs();
+    const activeKeys = new Set();
+    const pulse = 0.55 + 0.45*Math.sin(now*0.006);    // 0.1~1.0 맥동
+    pairs.forEach(p=>{
+      const key = p.carrier.id;
+      activeKeys.add(key);
+      const hex = p.io==='in' ? 0x40a0ff : 0xffa040;   // IN 청색 / OUT 주황
+      let co = FLOW.coop[key];
+      if(!co){
+        // 펄스 링(캐리어 발밑) + AMR 발밑 작은 링 + 둘을 잇는 바닥 연결 스트립
+        const ringGeo = new THREE.RingGeometry(1.3, 1.9, 28);
+        const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({transparent:true, opacity:.9, side:THREE.DoubleSide}));
+        ring.rotation.x=-Math.PI/2;
+        const amrRing = new THREE.Mesh(new THREE.RingGeometry(0.5,0.8,20), new THREE.MeshBasicMaterial({transparent:true, opacity:.9, side:THREE.DoubleSide}));
+        amrRing.rotation.x=-Math.PI/2;
+        const link = new THREE.Mesh(new THREE.PlaneGeometry(1,0.16), new THREE.MeshBasicMaterial({transparent:true, opacity:.7, side:THREE.DoubleSide}));
+        link.rotation.x=-Math.PI/2;
+        FLOW.layer.add(ring); FLOW.layer.add(amrRing); FLOW.layer.add(link);
+        co = {ring, amrRing, link}; FLOW.coop[key]=co;
+      }
+      co.ring.material.color.setHex(hex); co.amrRing.material.color.setHex(hex); co.link.material.color.setHex(hex);
+      co.ring.material.opacity = .35 + .55*pulse; co.amrRing.material.opacity = .35 + .55*pulse;
+      co.ring.position.set(p.carrier.x, 0.08, p.carrier.z);
+      co.ring.scale.setScalar(0.85 + 0.25*pulse);
+      co.amrRing.position.set(p.amr.x, 0.07, p.amr.z);
+      // 연결 스트립: 캐리어↔AMR 중점에 놓고 길이·각도 맞춤
+      const mx=(p.carrier.x+p.amr.x)/2, mz=(p.carrier.z+p.amr.z)/2;
+      const len=Math.max(0.1, p.dist);
+      co.link.position.set(mx, 0.05, mz);
+      co.link.scale.set(len, 1, 1);
+      co.link.rotation.z = -Math.atan2(p.amr.z-p.carrier.z, p.amr.x-p.carrier.x);
+      co.link.material.opacity = .3 + .4*pulse;
+    });
+    // 종료된 협업 정리
+    Object.keys(FLOW.coop).forEach(key=>{
+      if(activeKeys.has(key)) return;
+      const co=FLOW.coop[key];
+      [co.ring, co.amrRing, co.link].forEach(m=>{ FLOW.layer.remove(m); m.geometry.dispose(); m.material.dispose(); });
+      delete FLOW.coop[key];
+    });
   }
   // ── ③ 처리량 게이지 HTML ──
   const g=document.getElementById('flowGauge'); if(!g) return;
   const target=flowDailyTarget(), pace=flowCurrentPace();
   if(!g._t || now-g._t>500){   // 0.5s마다 갱신(과도 리페인트 방지)
     g._t=now;
-    let inner=`<div class="fgTitle">🚚 처리량 (재배주기 ${FLOW.cycleDayInput}일)</div>`;
+    let inner=`<div class="fgTitle">🚚 처리량</div>`;
+    inner+=`<div class="fgRow fgCycle"><span>재배주기</span><span class="fgStep"><button onclick="flowSetCycle(-1)">−</button><b>${FLOW.cycleDayInput}일</b><button onclick="flowSetCycle(1)">+</button></span></div>`;
     inner+=`<div class="fgRow"><span>하루 목표</span><b>${target.toFixed(0)}셀</b></div>`;
     {
       const ratio=pace.perDay/target;
@@ -4306,10 +4364,27 @@ function updateFlowOverlay(){
       inner+=`<div class="fgTrack"><div class="fgFill" style="width:${Math.min(100,ratio*100)}%;background:${col}"></div></div>`;
       inner+=`<div class="fgVerdict" style="color:${col}">${ratio>=1?`✓ 목표의 ${ratio.toFixed(1)}배 여유`:'⚠ 목표 미달 페이스'}</div>`;
     }
+    // 협업 요약: 현재 캐리어↔AMR 제자리 스왑 인계 건수
+    const coop = flowCoopPairs();
+    if(coop.length){
+      const ph = coop.map(p=>p.phase);
+      inner+=`<div class="fgRow" style="margin-top:5px"><span>인계 협업</span><b style="color:#ffb84d">${coop.length}건 · ${ph[0]}</b></div>`;
+    }else{
+      inner+=`<div class="fgRow" style="margin-top:5px"><span>인계 협업</span><b style="color:#6a9a8a">이동 중</b></div>`;
+    }
+    // 병목 요약: 현재 활성 히트(정지·저속 누적) 개수
+    const bn = (FLOW.heat||[]).filter(h=>h.v>0.15).length;
+    inner+=`<div class="fgRow"><span>통로 병목</span><b style="color:${bn?'#e24b4a':'#39d98a'}">${bn?`${bn}곳 발생`:'없음'}</b></div>`;
     g.innerHTML=inner;
   }
 }
 window.updateFlowOverlay = updateFlowOverlay;
+// 재배주기 조절(±1일, 5~60일 범위) → 목표·페이스 즉시 재계산
+window.flowSetCycle = function(d){
+  FLOW.cycleDayInput = Math.max(5, Math.min(60, (FLOW.cycleDayInput||25) + d));
+  const g=document.getElementById('flowGauge'); if(g) g._t=0;   // 캐시 무효화 → 즉시 갱신
+  updateFlowOverlay();
+};
 
 /* ── 종합(overview) 약식 카드 그리드 — 뷰 레지스트리 기반 적응형 ── */
 // 미니 시각 헬퍼: 진행률 바 / 통계행 / 스탯칩
@@ -4442,7 +4517,9 @@ window.setView = function(mode, auto){
   }else if(facilityView){
     tgt.set(GW*SPAN/2 - 6, 2.8, GL/2);  th = .58; ph = .68; rad = 104;
   }else if(isFlowMode){
-    tgt.set(GW*SPAN/2, 0.5, GL/2);      th = 0; ph = 0.14; rad = 78;   // 진짜 탑다운(위에서 수직) — cos(ph)≈1 → 높은 시점, 통로 겹침 없이 지도처럼
+    // 약간 기운 탑다운(bird's-eye) — 완전 수직이면 AMR 인계가 납작하게 눌림. 살짝만 기울여
+    //   랙통로 전체(위 IN통로 ~ 아래 OUT통로)가 한 화면에 들어오게 타겟은 중앙, 거리 넉넉히.
+    tgt.set(GW*SPAN/2, 0.6, GL/2);   th = 0; ph = 0.26; rad = 92;
   }else if(!cockpitView){
     tgt.set(GW*SPAN/2, 4.0, GL/2);      th = .48; ph = 1.05; rad = 88; spin = true;
   }
@@ -4499,8 +4576,8 @@ window.toggleView = function(){ window.setView(currentView==='cell' ? 'hw' : 'ce
    - ROTATE_MS 간격으로 누리셀 → HW → 설비 → … 순환
    - 사용자 조작(탭 클릭·마우스·휠·키·터치) 시 즉시 중단 + idle 타이머 리셋
    ══════════════════════════════════════════════════════ */
-const VIEW_ORDER = ['cell','hw','facility','cockpit'];
-const IDLE_MS   = 20000;   // 20초 무조작 → 자동 순환 시작
+const VIEW_ORDER = ['overview','cell','hw','facility','flow','cockpit'];
+const IDLE_MS   = 60000;   // 60초 무조작 → 자동 순환 시작
 const ROTATE_MS = 12000;   // 12초마다 다음 탭
 let idleTimer = null, rotateTimer = null, autoPlaying = false;
 
@@ -5151,7 +5228,10 @@ drawSpk();
           const vx=(p.x-pr.x)/dt, vz=(p.z-pr.z)/dt;
           const speed=Math.hypot(vx,vz);
           // (a) 예측 정지: 관통 전 e-stop
-          if(speed>0.3){
+          //   단, 주통로(가로: IN z≈1.5 / OUT z≈48.5) 주행 중엔 X가 랙통로 밖이어도 정상 →
+          //   inAnyLane(랙통로 X판정)의 이탈 오탐 제외. 주통로는 캐리어·AGV 공용 정상 경로.
+          const onMainAisle = (p.z < IN_AISLE_Z + AISLE_W/2) || (p.z > CROSS_AISLE_Z - AISLE_W/2);
+          if(speed>0.3 && !onMainAisle){
             const fx=p.x+vx*PREDICT_SEC;
             const nowInLane=inAnyLane(localX(p.x));
             if(nowInLane && !inAnyLane(localX(fx))){
