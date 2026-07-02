@@ -73,27 +73,25 @@ body{background:#0d1622;color:#d4ece6;font-family:'Segoe UI','Malgun Gothic',san
 #flowGauge .fgTrack{height:7px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin-top:8px}
 #flowGauge .fgFill{height:100%;border-radius:4px;transition:width .4s}
 #flowGauge .fgVerdict{font-size:11px;font-weight:600;margin-top:6px}
-/* 종합(overview) 약식 카드 그리드 */
-#overviewGrid{position:absolute;inset:0;display:none;z-index:7;background:#02060c;padding:14px;box-sizing:border-box;grid-gap:10px;overflow:auto}
+/* 종합(overview) 썸네일 카드 그리드 — 각 뷰 3D 캡처 배경 + 정보 오버랩 */
+#overviewGrid{position:absolute;inset:0;display:none;z-index:7;background:#02060c;padding:14px;box-sizing:border-box;grid-gap:12px;overflow:auto}
 #overviewGrid.on{display:grid}
-.ovCard{background:linear-gradient(160deg,#0a1826,#071320);border:1px solid rgba(29,158,117,.28);border-radius:10px;padding:12px 14px;cursor:pointer;transition:all .16s;display:flex;flex-direction:column;gap:6px;min-height:0}
-.ovCard:hover{border-color:rgba(94,224,232,.6);transform:translateY(-2px)}
-.ovCard .ovTitle{font-size:13px;font-weight:700;color:#cfe;display:flex;align-items:center;gap:8px}
-.ovCard .ovBody{font-size:12px;line-height:1.7;color:#8fb0a4;display:flex;flex-direction:column;gap:10px;margin-top:4px}
-.ovCard .ovBadge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;margin-left:auto}
-/* 미니 지표 */
-.ovStats{display:flex;gap:14px}
-.ovStat{display:flex;flex-direction:column}
-.ovStat .ovSv{font-size:20px;font-weight:700;line-height:1.1}
-.ovStat .ovSl{font-size:10px;color:#6a9a8a;margin-top:2px}
-.ovMetric{display:flex;align-items:center;gap:8px;font-size:11px}
-.ovMetric .ovMk{color:#6a9a8a;min-width:64px}
-.ovMetric .ovTrack{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
-.ovMetric .ovFill{display:block;height:100%;border-radius:4px;transition:width .3s}
-.ovMetric .ovMv{color:#cfe;min-width:32px;text-align:right;font-variant-numeric:tabular-nums}
-.ovBadge.ok{background:rgba(57,217,138,.16);color:#5ee0a0}
-.ovBadge.warn{background:rgba(239,159,39,.16);color:#efb050}
-.ovBadge.crit{background:rgba(226,75,74,.18);color:#ff8080}
+.ovCard{position:relative;border:1px solid rgba(29,158,117,.28);border-radius:12px;cursor:pointer;transition:all .16s;
+  overflow:hidden;min-height:0;background:linear-gradient(160deg,#0a1826,#071320);background-size:cover;background-position:center}
+.ovCard.hasThumb{background-color:#04101c}
+.ovCard:hover{border-color:rgba(94,224,232,.7);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.ovCard .ovShade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,16,.55) 0%,rgba(2,8,16,.15) 35%,rgba(2,8,16,.55) 100%);pointer-events:none}
+.ovCard .ovTitle{position:relative;z-index:2;font-size:13px;font-weight:700;color:#eaf6ff;display:flex;align-items:center;gap:8px;padding:12px 14px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.ovCard .ovBadge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;margin-left:auto;backdrop-filter:blur(3px)}
+.ovCard .ovOverlay{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:12px 14px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.ovCard .ovOverlay{font-size:13px;font-weight:600;color:#eaf6ff;text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.ovAlert{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;backdrop-filter:blur(3px)}
+.ovAlert.warn{background:rgba(239,159,39,.9);color:#1a1000}
+.ovAlert.crit{background:rgba(226,75,74,.92);color:#fff;animation:ovBlink 1.1s infinite}
+@keyframes ovBlink{0%,100%{opacity:1}50%{opacity:.55}}
+.ovBadge.ok{background:rgba(57,217,138,.22);color:#7dffb8}
+.ovBadge.warn{background:rgba(239,159,39,.28);color:#ffcf7a}
+.ovBadge.crit{background:rgba(226,75,74,.3);color:#ff9d9d}
 /* 조정실(cockpit) N분할 HUD 오버레이 — 캔버스 위에 절대배치 */
 #cockpitHud{position:absolute;inset:0;display:none;pointer-events:none;z-index:5}
 #cockpitHud.on{display:flex}
@@ -661,7 +659,7 @@ scene.background=new THREE.Color(0x10202e);
 scene.fog=new THREE.FogExp2(0x10202e,.004);   // GL=50m 하우스 → 옅게(끝까지 보이게)
 const cam=new THREE.PerspectiveCamera(40,ctr.clientWidth/ctr.clientHeight,.1,500);
 const _tmpV=new THREE.Vector3();   // 월드좌표 계산용 재사용 벡터 (픽&플레이스 운반)
-const ren=new THREE.WebGLRenderer({antialias:true});
+const ren=new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});  // preserve: 종합탭 썸네일 toDataURL 캡처용
 ren.setPixelRatio(Math.min(devicePixelRatio,2));
 ren.setSize(ctr.clientWidth,ctr.clientHeight);
 ren.shadowMap.enabled=true;
@@ -4315,69 +4313,91 @@ window.updateFlowOverlay = updateFlowOverlay;
 
 /* ── 종합(overview) 약식 카드 그리드 — 뷰 레지스트리 기반 적응형 ── */
 // 미니 시각 헬퍼: 진행률 바 / 통계행 / 스탯칩
-function ovBar(label, pct, color){
-  const p=Math.max(0,Math.min(100,pct));
-  return `<div class="ovMetric"><span class="ovMk">${label}</span>
-    <span class="ovTrack"><span class="ovFill" style="width:${p}%;background:${color}"></span></span>
-    <span class="ovMv">${Math.round(pct)}%</span></div>`;
-}
-function ovStat(pairs){ // [[label,val,color]...]
-  return `<div class="ovStats">`+pairs.map(([l,v,c])=>`<div class="ovStat"><div class="ovSv" style="color:${c||'#cfe'}">${v}</div><div class="ovSl">${l}</div></div>`).join('')+`</div>`;
-}
+// 종합 카드 KPI: 썸네일 위 오버랩용 — headline(핵심 1줄) + alerts(경고 칩) + badge.
+//   세밀 수치는 개별 탭에서. 여기선 "한눈에 상태·경고".
 const VIEW_TILES = [
   { key:'cell', label:'누리셀', icon:'🌱', kpi(){
       const total = (typeof NDRUM!=='undefined')?NDRUM:2880;
-      let ready=0, growing=0, seed=0;
-      if(typeof dstage!=='undefined') Array.from(dstage).forEach(s=>{ if(s===3)ready++; else if(s>=1)growing++; else seed++; });
-      const pct = ready/total*100;
-      const body = ovStat([['수확임박', ready, ready>total*0.15?'#efb050':'#5ee0a0'],['생육중', growing,'#7aae9c'],['시드', seed,'#6a9a8a']])
-        + ovBar('수확 비율', pct, ready>total*0.15?'#efb050':'#39d98a');
-      return { body, badge: ready>total*0.15?'warn':'ok', badgeText: ready>total*0.15?'수확 몰림':'정상' };
+      let ready=0; if(typeof dstage!=='undefined') ready=Array.from(dstage).filter(s=>s===3).length;
+      const spill = ready>total*0.15;
+      const alerts=[]; if(spill) alerts.push({lv:'warn', txt:`수확 몰림 ${ready}`});
+      return { headline:`수확임박 ${ready} / ${total}`, alerts, badge: spill?'warn':'ok', badgeText: spill?'주의':'정상' };
   }},
   { key:'hw', label:'HW', icon:'🖧', kpi(){
-      const tot=(typeof spans!=='undefined')?spans.length:5;
       const warn=(typeof spans!=='undefined')?spans.filter(s=>s.status==='warning').length:0;
-      const ok=tot-warn;
-      const body = ovStat([['정상 동', ok,'#5ee0a0'],['경고 동', warn, warn?'#ff8080':'#6a9a8a'],['센서', '20/20','#7aae9c']])
-        + ovBar('센서 정상률', ok/tot*100, warn?'#efb050':'#39d98a');
-      return { body, badge: warn?'warn':'ok', badgeText: warn?`${warn}동 경고`:'정상' };
+      const alerts=[]; if(warn) alerts.push({lv:'crit', txt:`${warn}동 경고`});
+      return { headline:`센서 20/20 · 경고 ${warn}동`, alerts, badge: warn?'warn':'ok', badgeText: warn?'경고':'정상' };
   }},
   { key:'facility', label:'설비', icon:'🔧', kpi(){
-      const body = ovStat([['관수','ON','#5ee0a0'],['냉난방','자동','#7aae9c'],['CO₂','정상','#7aae9c']])
-        + ovBar('설비 가동', 100, '#39d98a');
-      return { body, badge:'ok', badgeText:'정상' };
+      return { headline:'관수 ON · 냉난방 자동', alerts:[], badge:'ok', badgeText:'정상' };
   }},
   { key:'flow', label:'물류 흐름', icon:'🚚', kpi(){
       const target=flowDailyTarget(), pace=flowCurrentPace();
-      if(!pace) return { body: ovStat([['목표', target.toFixed(0)+'셀','#7aae9c'],['페이스','측정중','#6a9a8a']]), badge:'ok', badgeText:'측정중' };
       const ratio=pace.perDay/target;
-      const col = ratio>=1.5?'#39d98a':ratio>=1?'#efb050':'#e24b4a';
-      const body = ovStat([['목표/일', target.toFixed(0),'#7aae9c'],['현재 페이스', pace.perDay.toFixed(0), col],['사이클', pace.avgCycle.toFixed(0)+'s','#7aae9c']])
-        + ovBar('목표 달성률', Math.min(100,ratio*100), col);
-      return { body, badge: ratio>=1.5?'ok':ratio>=1?'warn':'crit', badgeText: ratio>=1?`목표의 ${ratio.toFixed(1)}배`:'미달' };
+      const alerts=[]; if(ratio<1) alerts.push({lv:'crit', txt:'목표 미달 페이스'});
+      const bt = ratio>=1.5?`${ratio.toFixed(1)}배`:ratio>=1?'적정':'미달';
+      return { headline:`페이스 ${pace.perDay.toFixed(0)}/${target.toFixed(0)}셀·일`, alerts,
+               badge: ratio>=1.5?'ok':ratio>=1?'warn':'crit', badgeText: bt };
   }},
   { key:'cockpit', label:'조정실', icon:'🎮', kpi(){
       const tot=(typeof carriers!=='undefined')?carriers.length:3;
-      let active=0, charging=0;
-      if(typeof carriers!=='undefined') carriers.forEach(c=>{ if(c.state===4)charging++; else active++; });
-      const body = ovStat([['가동', active,'#5ee0a0'],['충전/예비', charging,'#7aae9c'],['AMR','12/12','#7aae9c']])
-        + ovBar('캐리어 가동률', active/tot*100, '#39d98a');
-      return { body, badge:'ok', badgeText:'가동중' };
+      let charging=0; if(typeof carriers!=='undefined') carriers.forEach(c=>{ if(c.state===4)charging++; });
+      return { headline:`캐리어 ${tot-charging}/${tot} 가동 · AMR 12`, alerts:[], badge:'ok', badgeText:'가동중' };
   }}
 ];
+// 각 뷰 3D 썸네일 캐시 (dataURL). 종합 진입 시 1회 캡처.
+const OV_THUMBS = {};
+let _ovCapturing = false;                    // 캡처 중 오버레이 토글 스킵 플래그
+// 뷰를 실제 setView로 전환 → 1프레임 렌더 → dataURL 캡처. (오버레이 grid는 호출부가 숨김)
+function captureViewThumb(key){
+  setView(key, true);                        // 실제 뷰 전환(가시성·카메라 세팅 정상 실행)
+  if(key==='cockpit'){
+    // cockpit은 분할 카메라라 aspect 왜곡 → 캡처엔 메인 cam(현 프리셋)으로 대체 렌더
+    try{ composer.render(); }catch(e){ ren.render(scene, cam); }
+  }else{
+    try{ composer.render(); }catch(e){ ren.render(scene, cam); }
+  }
+  try{ OV_THUMBS[key] = ren.domElement.toDataURL('image/jpeg', 0.6); }catch(e){}
+}
 function renderOverviewGrid(){
   const el=document.getElementById('overviewGrid'); if(!el) return;
   const n=VIEW_TILES.length, cols=Math.ceil(Math.sqrt(n));
   el.style.gridTemplateColumns=`repeat(${cols},1fr)`;
   el.innerHTML = VIEW_TILES.map(t=>{
-    let k; try{ k=t.kpi(); }catch(e){ k={body:'—',badge:'ok',badgeText:'—'}; }
-    return `<div class="ovCard" onclick="setView('${t.key}')">
+    let k; try{ k=t.kpi(); }catch(e){ k={badge:'ok',badgeText:'—',alerts:[]}; }
+    const thumb = OV_THUMBS[t.key];
+    const bg = thumb ? `style="background-image:url(${thumb})"` : '';
+    const alertHtml = (k.alerts&&k.alerts.length)
+      ? k.alerts.map(a=>`<span class="ovAlert ${a.lv}">${a.txt}</span>`).join('')
+      : '';
+    return `<div class="ovCard${thumb?' hasThumb':''}" ${bg} onclick="setView('${t.key}')">
+      <div class="ovShade"></div>
       <div class="ovTitle">${t.icon} ${t.label}<span class="ovBadge ${k.badge}">${k.badgeText}</span></div>
-      <div class="ovBody">${k.body}</div>
+      <div class="ovOverlay">${k.headline||''}${alertHtml}</div>
     </div>`;
   }).join('');
 }
 window.renderOverviewGrid = renderOverviewGrid;
+// 종합 진입 시: 썸네일 6장 순차 캡처 후 원래 뷰 복원 (1회성). 이후 재캡처는 수동.
+let _ovThumbsReady = false;
+function ensureOverviewThumbs(){
+  if(_ovThumbsReady) return;
+  _ovThumbsReady = true;
+  const ovEl=document.getElementById('overviewGrid');
+  const gaugeEl=document.getElementById('flowGauge');
+  // 캡처 동안 오버레이 숨김(씬만 렌더되게) + setView 오버레이 토글 스킵
+  if(ovEl) ovEl.classList.remove('on');
+  _ovCapturing = true;
+  VIEW_TILES.forEach(t=>captureViewThumb(t.key));
+  _ovCapturing = false;
+  // 뷰포트·aspect·크기 원복(cockpit 분할 렌더 잔재 방지)
+  ren.setViewport(0,0,ren.domElement.width,ren.domElement.height);
+  cam.aspect = ctr.clientWidth/ctr.clientHeight; cam.updateProjectionMatrix();
+  if(gaugeEl) gaugeEl.classList.remove('on');
+  setView('overview', true);                  // 종합으로 복귀(grid 다시 on + 우측/좌측 패널 정리)
+  renderOverviewGrid();                        // 썸네일 반영해 재렌더
+}
+window.ensureOverviewThumbs = ensureOverviewThumbs;
 
 window.setView = function(mode, auto){
   // 사용자 클릭(auto가 아님)이면 자동 순환 중단 + idle 타이머 리셋
@@ -4451,6 +4471,9 @@ window.setView = function(mode, auto){
     else hud.classList.remove('on');
   }
 
+  // 캡처 중이면 오버레이/패널 조작 스킵(씬만 렌더되도록)
+  if(_ovCapturing) return;
+
   // 물류 흐름(flow) 게이지 / 종합(overview) 그리드 오버레이 토글
   const gaugeEl = document.getElementById('flowGauge');
   const ovEl   = document.getElementById('overviewGrid');
@@ -4462,7 +4485,10 @@ window.setView = function(mode, auto){
   ['lp','pvPanel'].forEach(pid=>{ const p=document.getElementById(pid); if(p) p.style.display = hideL ? 'none' : ''; });
   const rp=document.getElementById('rp'); if(rp) rp.style.display = isOverview ? 'none' : '';
   if(isFlow) updateFlowOverlay();
-  if(isOverview) renderOverviewGrid();
+  if(isOverview){
+    renderOverviewGrid();
+    if(!_ovThumbsReady) setTimeout(ensureOverviewThumbs, 60);   // 첫 진입 시 썸네일 캡처(그리드 뜬 뒤)
+  }
 };
 // 기존 호출 호환
 window.toggleView = function(){ window.setView(currentView==='cell' ? 'hw' : 'cell'); };
